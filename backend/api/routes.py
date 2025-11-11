@@ -1,6 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
+from sqlalchemy import func, desc
 from typing import List, Optional
 from datetime import datetime
 import os
@@ -303,11 +304,32 @@ async def get_calls(
     
     calls = query.order_by(Call.created_at.desc()).all()
     
+    if not calls:
+        return {"calls": []}
+    
+    call_ids = [call.id for call in calls]
+    
+    latest_eval_subq = db.query(
+        Evaluation.call_id,
+        func.max(Evaluation.created_at).label('max_created_at')
+    ).filter(
+        Evaluation.call_id.in_(call_ids)
+    ).group_by(Evaluation.call_id).subquery()
+    
+    latest_evaluations = db.query(Evaluation).join(
+        latest_eval_subq,
+        (Evaluation.call_id == latest_eval_subq.c.call_id) &
+        (Evaluation.created_at == latest_eval_subq.c.max_created_at)
+    ).order_by(desc(Evaluation.id)).all()
+    
+    eval_dict = {}
+    for ev in latest_evaluations:
+        if ev.call_id not in eval_dict:
+            eval_dict[ev.call_id] = ev
+    
     result = []
     for call in calls:
-        latest_evaluation = db.query(Evaluation).filter(
-            Evaluation.call_id == call.id
-        ).order_by(Evaluation.created_at.desc()).first()
+        latest_evaluation = eval_dict.get(call.id)
         
         result.append({
             "id": call.id,
@@ -385,6 +407,54 @@ async def export_calls(
     
     calls = query.order_by(Call.created_at.desc()).all()
     
+    if not calls:
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "Номер", "Дата звонка", "Дата оценки", "Месяц оценки", "Длительность звонка", "Менеджер",
+            "Установление контакта", "Квалификация", "Выявление потребностей", "", "", "Презентация", "", "", "",
+            "Работа с возражениями", "Завершение сделки", "Голосовые характеристики", "", "Итоговая оценка"
+        ])
+        writer.writerow([
+            "", "", "", "", "", "",
+            "1 Приветствие", "2 Первичная квалификация",
+            "3.1 Вопросы вторичной квалификации", "3.2 Вопрос о цели обучения", "3.3 Резюмирование потребности",
+            "4.1 Презентация обучения из потребности", "4.2 Презентация формата обучения", "4.3 Презентация стоимости", "4.4 Озвучивание информации для пробного",
+            "5 Уточнить сомнение клиента",
+            "6 Завершение сделки",
+            "7.1 Грамотность и формулировки", "7.2 Инициатива за ведение диалога",
+            ""
+        ])
+        output.seek(0)
+        csv_content = output.getvalue().encode("utf-8-sig")
+        return Response(
+            content=csv_content,
+            media_type="text/csv; charset=utf-8-sig",
+            headers={
+                "Content-Disposition": f'attachment; filename="calls_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+            }
+        )
+    
+    call_ids = [call.id for call in calls]
+    
+    latest_eval_subq = db.query(
+        Evaluation.call_id,
+        func.max(Evaluation.created_at).label('max_created_at')
+    ).filter(
+        Evaluation.call_id.in_(call_ids)
+    ).group_by(Evaluation.call_id).subquery()
+    
+    latest_evaluations = db.query(Evaluation).join(
+        latest_eval_subq,
+        (Evaluation.call_id == latest_eval_subq.c.call_id) &
+        (Evaluation.created_at == latest_eval_subq.c.max_created_at)
+    ).order_by(desc(Evaluation.id)).all()
+    
+    eval_dict = {}
+    for ev in latest_evaluations:
+        if ev.call_id not in eval_dict:
+            eval_dict[ev.call_id] = ev
+    
     output = io.StringIO()
     writer = csv.writer(output)
     
@@ -406,9 +476,7 @@ async def export_calls(
     ])
     
     for idx, call in enumerate(calls, 1):
-        latest_evaluation = db.query(Evaluation).filter(
-            Evaluation.call_id == call.id
-        ).order_by(Evaluation.created_at.desc()).first()
+        latest_evaluation = eval_dict.get(call.id)
         
         if not latest_evaluation:
             continue
