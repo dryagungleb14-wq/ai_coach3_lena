@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Coach - Анализ звонков",
+  title: "AI Coach — анализ звонков",
   description: "Тулза для анализа звонков менеджеров",
 };
 

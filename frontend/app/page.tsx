@@ -107,7 +107,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white">
       <div className="w-full max-w-6xl mx-auto p-6">
-        <h1 className="text-3xl font-semibold mb-6">AI Coach - Анализ звонков</h1>
+        <h1 className="text-3xl font-semibold mb-6">AI Coach — анализ звонков</h1>
 
         {isCheckingBackend ? (
           <div className="mb-4 p-4 bg-gray-100 rounded">
