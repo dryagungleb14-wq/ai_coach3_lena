@@ -1,4 +1,4 @@
-дл"use client";
+"use client";
 
 import React from "react";
 import { Evaluation } from "@/lib/api";
