@@ -1,4 +1,4 @@
-"use client";
+дл"use client";
 
 import React from "react";
 import { Evaluation } from "@/lib/api";
@@ -86,6 +86,7 @@ export default function EvaluationTable({ evaluation }: EvaluationTableProps) {
         <thead>
           <tr className="bg-gray-100">
             <th className="border border-gray-300 px-4 py-2 text-left">Этап</th>
+            <th className="border border-gray-300 px-4 py-2 text-left">Критерий</th>
             <th className="border border-gray-300 px-4 py-2 text-center">Балл</th>
             <th className="border border-gray-300 px-4 py-2 text-left">Комментарий</th>
           </tr>
