@@ -218,9 +218,6 @@ export default function Home() {
                           {call.evaluation.итоговая_оценка} баллов
                         </p>
                       )}
-                      {call.evaluation?.нарушения && (
-                        <p className="text-sm text-red-600">Нарушения</p>
-                      )}
                     </div>
                   </div>
                 </div>

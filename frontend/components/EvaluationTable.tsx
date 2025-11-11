@@ -14,45 +14,49 @@ export default function EvaluationTable({ evaluation }: EvaluationTableProps) {
     {
       name: "Установление контакта",
       items: [
-        { key: "1.1", label: "1.1 Приветствие" },
-        { key: "1.2", label: "1.2 Наличие техники" }
+        { key: "1", label: "1 Приветствие, знакомство" }
       ]
     },
     {
-      name: "Диагностика",
+      name: "Квалификация",
       items: [
-        { key: "2.1", label: "2.1 Выявление цели, боли" },
-        { key: "2.2", label: "2.2 Критерии обучения" }
+        { key: "2", label: "2 Первичная квалификация" }
       ]
     },
     {
-      name: "Продажа",
+      name: "Выявление потребностей",
       items: [
-        { key: "3.1", label: "3.1 Запись на пробное" },
-        { key: "3.2", label: "3.2 Повторная связь" }
+        { key: "3.1", label: "3.1 Вопросы вторичной квалификации" },
+        { key: "3.2", label: "3.2 Вопрос о цели обучения" },
+        { key: "3.3", label: "3.3 Резюмирование потребности" }
       ]
     },
     {
       name: "Презентация",
       items: [
-        { key: "4.1", label: "4.1 Презентация формата" },
-        { key: "4.2", label: "4.2 Презентация до пробного" }
+        { key: "4.1", label: "4.1 Презентация обучения из потребности" },
+        { key: "4.2", label: "4.2 Презентация формата обучения" },
+        { key: "4.3", label: "4.3 Презентация стоимости" },
+        { key: "4.4", label: "4.4 Озвучивание информации для пробного" }
       ]
     },
     {
       name: "Работа с возражениями",
       items: [
-        { key: "5.1", label: "5.1 Выявление возражений" },
-        { key: "5.2", label: "5.2 Отработка возражений" }
+        { key: "5", label: "5 Уточнить сомнение клиента" }
       ]
     },
     {
-      name: "Завершение",
+      name: "Завершение сделки",
       items: [
-        { key: "6", label: "6. Контрольные точки" },
-        { key: "7", label: "7. Корректность сделки" },
-        { key: "8", label: "8. Грамотность" },
-        { key: "9", label: "9. Нарушения" }
+        { key: "6", label: "6 Завершение сделки" }
+      ]
+    },
+    {
+      name: "Голосовые характеристики",
+      items: [
+        { key: "7.1", label: "7.1 Грамотность и формулировки" },
+        { key: "7.2", label: "7.2 Инициатива за ведение диалога" }
       ]
     }
   ];
@@ -67,10 +71,6 @@ export default function EvaluationTable({ evaluation }: EvaluationTableProps) {
   const getScoreDisplay = (key: string) => {
     const scoreData = scores[key];
     if (!scoreData) return "-";
-    
-    if (key === "9") {
-      return scoreData.violation ? "TRUE" : "FALSE";
-    }
     
     return scoreData.score !== undefined ? scoreData.score : "-";
   };
@@ -120,9 +120,7 @@ export default function EvaluationTable({ evaluation }: EvaluationTableProps) {
           <tr className="bg-gray-50 font-semibold">
             <td className="border border-gray-300 px-4 py-2" colSpan={2}>Итоговая оценка</td>
             <td className="border border-gray-300 px-4 py-2 text-center">{evaluation.итоговая_оценка}</td>
-            <td className="border border-gray-300 px-4 py-2">
-              {evaluation.нарушения ? "Обнулено из-за нарушений" : ""}
-            </td>
+            <td className="border border-gray-300 px-4 py-2"></td>
           </tr>
         </tfoot>
       </table>

@@ -140,7 +140,6 @@ export default function HistoryPage() {
                     {call.evaluation?.итоговая_оценка !== undefined
                       ? call.evaluation.итоговая_оценка
                       : "-"}
-                    {call.evaluation?.нарушения && " (нарушения)"}
                   </td>
                   <td className="border border-gray-300 px-4 py-2 text-center">
                     <button

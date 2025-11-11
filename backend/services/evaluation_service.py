@@ -11,7 +11,7 @@ genai.configure(api_key=GEMINI_API_KEY)
 logger = logging.getLogger(__name__)
 
 def normalize_scores(scores_data: dict) -> dict:
-    valid_scores = {0, 5, 10}
+    valid_scores = {0, 0.5, 1}
     
     for key, value in scores_data.items():
         if isinstance(value, dict):
@@ -22,8 +22,6 @@ def normalize_scores(scores_data: dict) -> dict:
                         closest = min(valid_scores, key=lambda x: abs(x - score))
                         logger.warning(f"Нормализация балла {key}: {score} -> {closest}")
                         value["score"] = closest
-            elif "violation" in value and key == "9":
-                continue
     
     return scores_data
 
@@ -74,7 +72,7 @@ def evaluate_transcription(transcription: str) -> dict:
         
         scores_data = normalize_scores(scores_data)
         
-        logger.info(f"Итоговые баллы: {json.dumps({k: v.get('score', v.get('violation', 'N/A')) for k, v in scores_data.items()}, ensure_ascii=False)}")
+        logger.info(f"Итоговые баллы: {json.dumps({k: v.get('score', 'N/A') for k, v in scores_data.items()}, ensure_ascii=False)}")
         
     except Exception as e:
         logger.error(f"Ошибка при оценке: {e}")
@@ -82,15 +80,10 @@ def evaluate_transcription(transcription: str) -> dict:
         logger.error(traceback.format_exc())
         raise
     
-    violations = scores_data.get("9", {}).get("violation", False)
-    
     total_score = 0
-    if not violations:
-        for key in ["1.1", "1.2", "2.1", "2.2", "3.1", "3.2", "4.1", "4.2", "5.1", "5.2", "6", "7", "8"]:
-            score = scores_data.get(key, {}).get("score", 0)
-            total_score += score
-    else:
-        total_score = 0
+    for key in ["1", "2", "3.1", "3.2", "3.3", "4.1", "4.2", "4.3", "4.4", "5", "6", "7.1", "7.2"]:
+        score = scores_data.get(key, {}).get("score", 0)
+        total_score += score
     
     comments = {}
     for key, value in scores_data.items():
@@ -100,7 +93,7 @@ def evaluate_transcription(transcription: str) -> dict:
     result = {
         "scores": scores_data,
         "итоговая_оценка": total_score,
-        "нарушения": violations,
+        "нарушения": False,
         "комментарии": json.dumps(comments, ensure_ascii=False)
     }
     

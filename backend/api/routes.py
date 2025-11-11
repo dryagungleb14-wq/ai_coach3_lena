@@ -390,18 +390,18 @@ async def export_calls(
     
     writer.writerow([
         "Номер", "Дата звонка", "Дата оценки", "Месяц оценки", "Длительность звонка", "Менеджер",
-        "Установление контакта", "", "Диагностика", "", "Продажа", "", "Презентация", "",
-        "Работа с возражениями", "", "Завершение", "", "", "", "Итоговая оценка"
+        "Установление контакта", "Квалификация", "Выявление потребностей", "", "", "Презентация", "", "", "",
+        "Работа с возражениями", "Завершение сделки", "Голосовые характеристики", "", "Итоговая оценка"
     ])
     
     writer.writerow([
         "", "", "", "", "", "",
-        "1.1 Приветствие", "1.2 Наличие техники",
-        "2.1 Выявление цели, боли", "2.2 Критерии обучения",
-        "3.1 Запись на пробное", "3.2 Повторная связь",
-        "4.1 Презентация формата", "4.2 Презентация до пробного",
-        "5.1 Выявление возражений", "5.2 Отработка возражений",
-        "6. Контрольные точки", "7. Корректность сделки", "8. Грамотность", "9. Нарушения",
+        "1 Приветствие", "2 Первичная квалификация",
+        "3.1 Вопросы вторичной квалификации", "3.2 Вопрос о цели обучения", "3.3 Резюмирование потребности",
+        "4.1 Презентация обучения из потребности", "4.2 Презентация формата обучения", "4.3 Презентация стоимости", "4.4 Озвучивание информации для пробного",
+        "5 Уточнить сомнение клиента",
+        "6 Завершение сделки",
+        "7.1 Грамотность и формулировки", "7.2 Инициатива за ведение диалога",
         ""
     ])
     
@@ -425,12 +425,6 @@ async def export_calls(
         if evaluation_date:
             month = month_names.get(evaluation_date.month, "")
         
-        violation_text = "FALSE"
-        if latest_evaluation.нарушения:
-            violation_text = "TRUE"
-        elif scores.get("9", {}).get("violation", False):
-            violation_text = "TRUE"
-        
         row = [
             idx,
             call.call_date.strftime("%Y-%m-%d") if call.call_date else "",
@@ -438,20 +432,19 @@ async def export_calls(
             month,
             call.duration or "",
             call.manager or "",
-            scores.get("1.1", {}).get("score", ""),
-            scores.get("1.2", {}).get("score", ""),
-            scores.get("2.1", {}).get("score", ""),
-            scores.get("2.2", {}).get("score", ""),
+            scores.get("1", {}).get("score", ""),
+            scores.get("2", {}).get("score", ""),
             scores.get("3.1", {}).get("score", ""),
             scores.get("3.2", {}).get("score", ""),
+            scores.get("3.3", {}).get("score", ""),
             scores.get("4.1", {}).get("score", ""),
             scores.get("4.2", {}).get("score", ""),
-            scores.get("5.1", {}).get("score", ""),
-            scores.get("5.2", {}).get("score", ""),
+            scores.get("4.3", {}).get("score", ""),
+            scores.get("4.4", {}).get("score", ""),
+            scores.get("5", {}).get("score", ""),
             scores.get("6", {}).get("score", ""),
-            scores.get("7", {}).get("score", ""),
-            scores.get("8", {}).get("score", ""),
-            violation_text,
+            scores.get("7.1", {}).get("score", ""),
+            scores.get("7.2", {}).get("score", ""),
             latest_evaluation.итоговая_оценка or ""
         ]
         
@@ -486,18 +479,18 @@ async def export_call(call_id: int, db: Session = Depends(get_db)):
     
     writer.writerow([
         "Номер", "Дата звонка", "Дата оценки", "Месяц оценки", "Длительность звонка", "Менеджер",
-        "Установление контакта", "", "Диагностика", "", "Продажа", "", "Презентация", "",
-        "Работа с возражениями", "", "Завершение", "", "", "", "Итоговая оценка"
+        "Установление контакта", "Квалификация", "Выявление потребностей", "", "", "Презентация", "", "", "",
+        "Работа с возражениями", "Завершение сделки", "Голосовые характеристики", "", "Итоговая оценка"
     ])
     
     writer.writerow([
         "", "", "", "", "", "",
-        "1.1 Приветствие", "1.2 Наличие техники",
-        "2.1 Выявление цели, боли", "2.2 Критерии обучения",
-        "3.1 Запись на пробное", "3.2 Повторная связь",
-        "4.1 Презентация формата", "4.2 Презентация до пробного",
-        "5.1 Выявление возражений", "5.2 Отработка возражений",
-        "6. Контрольные точки", "7. Корректность сделки", "8. Грамотность", "9. Нарушения",
+        "1 Приветствие", "2 Первичная квалификация",
+        "3.1 Вопросы вторичной квалификации", "3.2 Вопрос о цели обучения", "3.3 Резюмирование потребности",
+        "4.1 Презентация обучения из потребности", "4.2 Презентация формата обучения", "4.3 Презентация стоимости", "4.4 Озвучивание информации для пробного",
+        "5 Уточнить сомнение клиента",
+        "6 Завершение сделки",
+        "7.1 Грамотность и формулировки", "7.2 Инициатива за ведение диалога",
         ""
     ])
     
@@ -513,12 +506,6 @@ async def export_call(call_id: int, db: Session = Depends(get_db)):
     if evaluation_date:
         month = month_names.get(evaluation_date.month, "")
     
-    violation_text = "FALSE"
-    if latest_evaluation.нарушения:
-        violation_text = "TRUE"
-    elif scores.get("9", {}).get("violation", False):
-        violation_text = "TRUE"
-    
     row = [
         1,
         call.call_date.strftime("%Y-%m-%d") if call.call_date else "",
@@ -526,20 +513,19 @@ async def export_call(call_id: int, db: Session = Depends(get_db)):
         month,
         call.duration or "",
         call.manager or "",
-        scores.get("1.1", {}).get("score", ""),
-        scores.get("1.2", {}).get("score", ""),
-        scores.get("2.1", {}).get("score", ""),
-        scores.get("2.2", {}).get("score", ""),
+        scores.get("1", {}).get("score", ""),
+        scores.get("2", {}).get("score", ""),
         scores.get("3.1", {}).get("score", ""),
         scores.get("3.2", {}).get("score", ""),
+        scores.get("3.3", {}).get("score", ""),
         scores.get("4.1", {}).get("score", ""),
         scores.get("4.2", {}).get("score", ""),
-        scores.get("5.1", {}).get("score", ""),
-        scores.get("5.2", {}).get("score", ""),
+        scores.get("4.3", {}).get("score", ""),
+        scores.get("4.4", {}).get("score", ""),
+        scores.get("5", {}).get("score", ""),
         scores.get("6", {}).get("score", ""),
-        scores.get("7", {}).get("score", ""),
-        scores.get("8", {}).get("score", ""),
-        violation_text,
+        scores.get("7.1", {}).get("score", ""),
+        scores.get("7.2", {}).get("score", ""),
         latest_evaluation.итоговая_оценка or ""
     ]
     
