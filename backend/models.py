@@ -30,6 +30,7 @@ class Call(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default="pending")
     progress = Column(Integer, default=0)
+    error_details = Column(Text)
     
     evaluations = relationship("Evaluation", back_populates="call")
 
@@ -39,7 +40,9 @@ class Evaluation(Base):
     id = Column(Integer, primary_key=True, index=True)
     call_id = Column(Integer, ForeignKey("calls.id"), nullable=False)
     scores = Column(JSON)
-    итоговая_оценка = Column(Integer)
+    итоговая_оценка = Column(Float)
+    max_score = Column(Float)
+    score_percent = Column(Float)
     нарушения = Column(Boolean, default=False)
     комментарии = Column(Text)
     is_retest = Column(Boolean, default=False)
@@ -62,6 +65,38 @@ def migrate_db():
             if 'progress' not in columns:
                 logger.info("Добавление колонки progress в таблицу calls")
                 conn.execute(text("ALTER TABLE calls ADD COLUMN progress INTEGER DEFAULT 0"))
+            
+            if 'error_details' not in columns:
+                logger.info("Добавление колонки error_details в таблицу calls")
+                conn.execute(text("ALTER TABLE calls ADD COLUMN error_details TEXT"))
+        
+        try:
+            eval_columns = [col['name'] for col in inspector.get_columns('evaluations')]
+            
+            with engine.begin() as conn:
+                db_type = engine.dialect.name
+                
+                if 'итоговая_оценка' in eval_columns:
+                    try:
+                        if db_type == 'postgresql':
+                            conn.execute(text("ALTER TABLE evaluations ALTER COLUMN итоговая_оценка TYPE REAL"))
+                            logger.info("Изменение типа итоговая_оценка с Integer на Float (PostgreSQL)")
+                        elif db_type == 'sqlite':
+                            logger.info("SQLite не требует изменения типа колонки (динамическая типизация)")
+                        else:
+                            logger.warning(f"Неизвестный тип БД {db_type}, пропуск изменения типа колонки")
+                    except Exception as e:
+                        logger.warning(f"Не удалось изменить тип итоговая_оценка: {e}")
+                
+                if 'max_score' not in eval_columns:
+                    logger.info("Добавление колонки max_score в таблицу evaluations")
+                    conn.execute(text("ALTER TABLE evaluations ADD COLUMN max_score REAL"))
+                
+                if 'score_percent' not in eval_columns:
+                    logger.info("Добавление колонки score_percent в таблицу evaluations")
+                    conn.execute(text("ALTER TABLE evaluations ADD COLUMN score_percent REAL"))
+        except Exception as e:
+            logger.warning(f"Таблица evaluations не существует или ошибка при миграции: {e}")
     except Exception as e:
         logger.error(f"Ошибка при проверке структуры таблицы: {e}")
         raise

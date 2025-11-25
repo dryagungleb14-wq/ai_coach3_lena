@@ -2,6 +2,7 @@ import google.generativeai as genai
 import json
 import os
 import logging
+import time
 
 from utils.checklist import get_checklist_prompt
 from config import GEMINI_API_KEY, GEMINI_EVALUATION_MODEL
@@ -17,7 +18,9 @@ def normalize_scores(scores_data: dict) -> dict:
         if isinstance(value, dict):
             if "score" in value:
                 score = value["score"]
-                if isinstance(score, (int, float)):
+                if score == "N/A" or score == "n/a" or score is None:
+                    value["score"] = "N/A"
+                elif isinstance(score, (int, float)):
                     if score not in valid_scores:
                         closest = min(valid_scores, key=lambda x: abs(x - score))
                         logger.warning(f"Нормализация балла {key}: {score} -> {closest}")
@@ -25,7 +28,7 @@ def normalize_scores(scores_data: dict) -> dict:
     
     return scores_data
 
-def evaluate_transcription(transcription: str) -> dict:
+def _evaluate_transcription_once(transcription: str) -> dict:
     if not transcription or len(transcription.strip()) == 0:
         raise ValueError("Транскрипция пустая. Невозможно провести оценку.")
     
@@ -80,10 +83,25 @@ def evaluate_transcription(transcription: str) -> dict:
         logger.error(traceback.format_exc())
         raise
     
-    total_score = 0
-    for key in ["1", "2", "3.1", "3.2", "3.3", "4.1", "4.2", "4.3", "4.4", "5", "6", "7.1", "7.2"]:
-        score = scores_data.get(key, {}).get("score", 0)
-        total_score += score
+    all_keys = ["1", "2", "3.1", "3.2", "3.3", "4.1", "4.2", "4.3", "4.4", "5", "6", "7.1", "7.2"]
+    total_score = 0.0
+    max_possible_score = 0.0
+    
+    for key in all_keys:
+        score_data = scores_data.get(key, {})
+        score = score_data.get("score", "N/A")
+        
+        if score == "N/A" or score == "n/a" or score is None:
+            continue
+        
+        if isinstance(score, (int, float)):
+            total_score += score
+            max_possible_score += 1.0
+    
+    if max_possible_score == 0:
+        score_percent = 0.0
+    else:
+        score_percent = (total_score / max_possible_score) * 100.0
     
     comments = {}
     for key, value in scores_data.items():
@@ -93,11 +111,37 @@ def evaluate_transcription(transcription: str) -> dict:
     result = {
         "scores": scores_data,
         "итоговая_оценка": total_score,
+        "max_score": max_possible_score,
+        "score_percent": score_percent,
         "нарушения": False,
         "комментарии": json.dumps(comments, ensure_ascii=False)
     }
     
-    logger.info(f"Итоговая оценка: {total_score}")
+    logger.info(f"Итоговая оценка: {total_score} из {max_possible_score} возможных ({score_percent:.1f}%)")
     
     return result
+
+def evaluate_transcription(transcription: str, max_retries: int = 3) -> dict:
+    last_exception = None
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(f"Попытка оценки {attempt}/{max_retries}")
+            return _evaluate_transcription_once(transcription)
+        except Exception as e:
+            last_exception = e
+            error_msg = str(e)
+            
+            if "quota" in error_msg.lower() or "429" in error_msg or "ResourceExhausted" in str(type(e)):
+                logger.error(f"Ошибка квоты API, повторная попытка не поможет: {e}")
+                raise
+            
+            if attempt < max_retries:
+                wait_time = 2 ** attempt
+                logger.warning(f"Ошибка оценки (попытка {attempt}/{max_retries}): {e}. Повтор через {wait_time} сек...")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"Все попытки оценки исчерпаны после {max_retries} попыток")
+    
+    raise Exception(f"Не удалось выполнить оценку после {max_retries} попыток: {str(last_exception)}") from last_exception
 

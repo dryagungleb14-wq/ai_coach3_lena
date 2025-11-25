@@ -90,6 +90,12 @@ export default function CallDetailPage() {
   };
 
   const handleRetest = async () => {
+    const confirmed = window.confirm(
+      "Повторная проверка может дать немного отличающиеся результаты из-за особенностей работы AI-модели.\n\n" +
+      "Продолжить?"
+    );
+    if (!confirmed) return;
+    
     setAnalyzing(true);
     try {
       await retestCall(callId);

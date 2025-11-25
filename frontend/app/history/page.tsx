@@ -121,6 +121,7 @@ export default function HistoryPage() {
                 <th className="border border-gray-300 px-4 py-2 text-left">Файл</th>
                 <th className="border border-gray-300 px-4 py-2 text-left">Менеджер</th>
                 <th className="border border-gray-300 px-4 py-2 text-left">Дата звонка</th>
+                <th className="border border-gray-300 px-4 py-2 text-left">Длительность</th>
                 <th className="border border-gray-300 px-4 py-2 text-left">ID звонка</th>
                 <th className="border border-gray-300 px-4 py-2 text-center">Оценка</th>
                 <th className="border border-gray-300 px-4 py-2 text-center">Действия</th>
@@ -135,10 +136,15 @@ export default function HistoryPage() {
                   <td className="border border-gray-300 px-4 py-2">
                     {call.call_date ? new Date(call.call_date).toLocaleDateString() : "-"}
                   </td>
+                  <td className="border border-gray-300 px-4 py-2">
+                    {call.duration
+                      ? `${Math.floor(call.duration / 60)}:${Math.floor(call.duration % 60).toString().padStart(2, "0")}`
+                      : "-"}
+                  </td>
                   <td className="border border-gray-300 px-4 py-2">{call.call_identifier || "-"}</td>
                   <td className="border border-gray-300 px-4 py-2 text-center">
                     {call.evaluation?.итоговая_оценка !== undefined
-                      ? call.evaluation.итоговая_оценка
+                      ? `${call.evaluation.итоговая_оценка}${call.evaluation.score_percent ? ` (${call.evaluation.score_percent.toFixed(1)}%)` : ""}`
                       : "-"}
                   </td>
                   <td className="border border-gray-300 px-4 py-2 text-center">

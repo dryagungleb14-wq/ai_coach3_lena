@@ -12,15 +12,39 @@ import io
 import logging
 import threading
 
+logger = logging.getLogger(__name__)
+
+try:
+    from mutagen import File as MutagenFile
+    from mutagen.mp3 import MP3
+    from mutagen.wave import WAVE
+    MUTAGEN_AVAILABLE = True
+except ImportError:
+    MUTAGEN_AVAILABLE = False
+    logger.warning("mutagen не установлен, длительность аудио не будет извлекаться")
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import Call, Evaluation, SessionLocal, init_db
 from services.transcription_service import transcribe_audio
 from services.evaluation_service import evaluate_transcription
 from services.websocket_service import manager
-
-logger = logging.getLogger(__name__)
 router = APIRouter()
+
+def get_audio_duration(audio_path: str) -> Optional[float]:
+    if not MUTAGEN_AVAILABLE:
+        return None
+    
+    try:
+        audio_file = MutagenFile(audio_path)
+        if audio_file is None:
+            return None
+        
+        duration = audio_file.info.length
+        return duration
+    except Exception as e:
+        logger.warning(f"Не удалось извлечь длительность из {audio_path}: {e}")
+        return None
 
 def get_db():
     db = SessionLocal()
@@ -58,6 +82,8 @@ async def upload_files(
                 content = await file.read()
                 f.write(content)
             
+            duration = get_audio_duration(file_path)
+            
             call_date_obj = None
             if call_date:
                 try:
@@ -70,7 +96,8 @@ async def upload_files(
                 audio_url=file_path,
                 manager=manager,
                 call_date=call_date_obj,
-                call_identifier=call_identifier
+                call_identifier=call_identifier,
+                duration=duration
             )
             
             db.add(call)
@@ -150,6 +177,8 @@ def analyze_in_background(call_id: int, audio_path: str):
                     call_id=call_id,
                     scores=evaluation_result["scores"],
                     итоговая_оценка=evaluation_result["итоговая_оценка"],
+                    max_score=evaluation_result.get("max_score"),
+                    score_percent=evaluation_result.get("score_percent"),
                     нарушения=evaluation_result["нарушения"],
                     комментарии=evaluation_result["комментарии"],
                     is_retest=False
@@ -166,13 +195,16 @@ def analyze_in_background(call_id: int, audio_path: str):
             
     except Exception as e:
         import traceback
+        error_traceback = traceback.format_exc()
+        error_details = f"{str(e)}\n\n{error_traceback}"
         logger.error(f"Ошибка в фоновой задаче: {e}")
-        logger.error(traceback.format_exc())
+        logger.error(error_traceback)
         db_local = SessionLocal()
         try:
             call_local = db_local.query(Call).filter(Call.id == call_id).first()
             if call_local:
                 call_local.status = "failed"
+                call_local.error_details = error_details
                 db_local.commit()
         finally:
             db_local.close()
@@ -255,6 +287,8 @@ async def retest_call(call_id: int, db: Session = Depends(get_db)):
         call_id=call_id,
         scores=evaluation_result["scores"],
         итоговая_оценка=evaluation_result["итоговая_оценка"],
+        max_score=evaluation_result.get("max_score"),
+        score_percent=evaluation_result.get("score_percent"),
         нарушения=evaluation_result["нарушения"],
         комментарии=evaluation_result["комментарии"],
         is_retest=True
@@ -270,6 +304,8 @@ async def retest_call(call_id: int, db: Session = Depends(get_db)):
             "id": evaluation.id,
             "scores": evaluation.scores,
             "итоговая_оценка": evaluation.итоговая_оценка,
+            "max_score": evaluation.max_score,
+            "score_percent": evaluation.score_percent,
             "нарушения": evaluation.нарушения,
             "комментарии": evaluation.комментарии,
             "is_retest": True
@@ -337,9 +373,12 @@ async def get_calls(
             "manager": call.manager,
             "call_date": call.call_date.isoformat() if call.call_date else None,
             "call_identifier": call.call_identifier,
+            "duration": call.duration,
             "created_at": call.created_at.isoformat(),
             "evaluation": {
                 "итоговая_оценка": latest_evaluation.итоговая_оценка if latest_evaluation else None,
+                "max_score": latest_evaluation.max_score if latest_evaluation else None,
+                "score_percent": latest_evaluation.score_percent if latest_evaluation else None,
                 "нарушения": latest_evaluation.нарушения if latest_evaluation else False
             } if latest_evaluation else None
         })
@@ -370,6 +409,8 @@ async def get_call(call_id: int, db: Session = Depends(get_db)):
                 "id": ev.id,
                 "scores": ev.scores,
                 "итоговая_оценка": ev.итоговая_оценка,
+                "max_score": ev.max_score,
+                "score_percent": ev.score_percent,
                 "нарушения": ev.нарушения,
                 "комментарии": ev.комментарии,
                 "is_retest": ev.is_retest,
@@ -377,6 +418,165 @@ async def get_call(call_id: int, db: Session = Depends(get_db)):
             }
             for ev in evaluations
         ]
+    }
+
+@router.get("/stats")
+async def get_stats(
+    manager: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Call)
+    
+    if manager:
+        query = query.filter(Call.manager == manager)
+    
+    if start_date:
+        try:
+            start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            query = query.filter(Call.call_date >= start_dt)
+        except:
+            pass
+    
+    if end_date:
+        try:
+            end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+            query = query.filter(Call.call_date <= end_dt)
+        except:
+            pass
+    
+    calls = query.all()
+    call_ids = [call.id for call in calls]
+    
+    if not call_ids:
+        return {
+            "total_calls": 0,
+            "avg_score": 0,
+            "avg_percent": 0,
+            "avg_duration": 0,
+            "managers_stats": [],
+            "parameter_stats": {},
+            "time_series": []
+        }
+    
+    latest_eval_subq = db.query(
+        Evaluation.call_id,
+        func.max(Evaluation.created_at).label('max_created_at')
+    ).filter(
+        Evaluation.call_id.in_(call_ids)
+    ).group_by(Evaluation.call_id).subquery()
+    
+    latest_evaluations = db.query(Evaluation).join(
+        latest_eval_subq,
+        (Evaluation.call_id == latest_eval_subq.c.call_id) &
+        (Evaluation.created_at == latest_eval_subq.c.max_created_at)
+    ).all()
+    
+    total_calls = len([ev for ev in latest_evaluations if ev.итоговая_оценка is not None])
+    
+    scores = [ev.итоговая_оценка for ev in latest_evaluations if ev.итоговая_оценка is not None]
+    percents = [ev.score_percent for ev in latest_evaluations if ev.score_percent is not None]
+    durations = [call.duration for call in calls if call.duration is not None]
+    
+    avg_score = sum(scores) / len(scores) if scores else 0
+    avg_percent = sum(percents) / len(percents) if percents else 0
+    avg_duration = sum(durations) / len(durations) if durations else 0
+    
+    managers_dict = {}
+    for call in calls:
+        if not call.manager:
+            continue
+        manager_name = call.manager
+        if manager_name not in managers_dict:
+            managers_dict[manager_name] = {
+                "manager": manager_name,
+                "total_calls": 0,
+                "avg_score": 0,
+                "avg_percent": 0,
+                "scores": [],
+                "percents": []
+            }
+        managers_dict[manager_name]["total_calls"] += 1
+    
+    eval_dict = {ev.call_id: ev for ev in latest_evaluations}
+    for call in calls:
+        if not call.manager:
+            continue
+        manager_name = call.manager
+        ev = eval_dict.get(call.id)
+        if ev and ev.итоговая_оценка is not None:
+            managers_dict[manager_name]["scores"].append(ev.итоговая_оценка)
+            if ev.score_percent is not None:
+                managers_dict[manager_name]["percents"].append(ev.score_percent)
+    
+    managers_stats = []
+    for manager_name, data in managers_dict.items():
+        if data["scores"]:
+            data["avg_score"] = sum(data["scores"]) / len(data["scores"])
+        if data["percents"]:
+            data["avg_percent"] = sum(data["percents"]) / len(data["percents"])
+        del data["scores"]
+        del data["percents"]
+        managers_stats.append(data)
+    
+    managers_stats.sort(key=lambda x: x["avg_percent"] if x["avg_percent"] > 0 else 0, reverse=True)
+    
+    parameter_stats = {}
+    all_keys = ["1", "2", "3.1", "3.2", "3.3", "4.1", "4.2", "4.3", "4.4", "5", "6", "7.1", "7.2"]
+    for key in all_keys:
+        parameter_stats[key] = {
+            "total": 0,
+            "max": 0,
+            "mid": 0,
+            "min": 0,
+            "na": 0,
+            "avg_score": 0
+        }
+    
+    for ev in latest_evaluations:
+        if not ev.scores:
+            continue
+        for key in all_keys:
+            score_data = ev.scores.get(key, {})
+            score = score_data.get("score")
+            if score == "N/A" or score == "n/a" or score is None:
+                parameter_stats[key]["na"] += 1
+            elif isinstance(score, (int, float)):
+                parameter_stats[key]["total"] += 1
+                if score == 1:
+                    parameter_stats[key]["max"] += 1
+                elif score == 0.5:
+                    parameter_stats[key]["mid"] += 1
+                elif score == 0:
+                    parameter_stats[key]["min"] += 1
+    
+    for key in all_keys:
+        stats = parameter_stats[key]
+        if stats["total"] > 0:
+            total_score = stats["max"] * 1 + stats["mid"] * 0.5 + stats["min"] * 0
+            stats["avg_score"] = total_score / stats["total"]
+    
+    time_series = []
+    for ev in latest_evaluations:
+        if ev.created_at:
+            date_str = ev.created_at.strftime("%Y-%m-%d")
+            time_series.append({
+                "date": date_str,
+                "score": ev.итоговая_оценка if ev.итоговая_оценка is not None else 0,
+                "percent": ev.score_percent if ev.score_percent is not None else 0
+            })
+    
+    time_series.sort(key=lambda x: x["date"])
+    
+    return {
+        "total_calls": total_calls,
+        "avg_score": round(avg_score, 2),
+        "avg_percent": round(avg_percent, 2),
+        "avg_duration": round(avg_duration, 2),
+        "managers_stats": managers_stats,
+        "parameter_stats": parameter_stats,
+        "time_series": time_series
     }
 
 @router.get("/export")

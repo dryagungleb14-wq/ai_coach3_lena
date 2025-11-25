@@ -72,7 +72,12 @@ export default function EvaluationTable({ evaluation }: EvaluationTableProps) {
     const scoreData = scores[key];
     if (!scoreData) return "-";
     
-    return scoreData.score !== undefined ? scoreData.score : "-";
+    const score = scoreData.score;
+    if (score === "N/A" || score === "n/a" || score === null || score === undefined) {
+      return "N/A";
+    }
+    
+    return score !== undefined ? score : "-";
   };
 
   const getComment = (key: string) => {
@@ -120,9 +125,25 @@ export default function EvaluationTable({ evaluation }: EvaluationTableProps) {
         <tfoot>
           <tr className="bg-gray-50 font-semibold">
             <td className="border border-gray-300 px-4 py-2" colSpan={2}>Итоговая оценка</td>
-            <td className="border border-gray-300 px-4 py-2 text-center">{evaluation.итоговая_оценка}</td>
+            <td className="border border-gray-300 px-4 py-2 text-center">
+              {evaluation.итоговая_оценка !== undefined ? evaluation.итоговая_оценка : "-"}
+              {evaluation.max_score !== undefined && evaluation.max_score > 0 && (
+                <span className="text-sm text-gray-600 ml-2">
+                  / {evaluation.max_score}
+                </span>
+              )}
+            </td>
             <td className="border border-gray-300 px-4 py-2"></td>
           </tr>
+          {evaluation.score_percent !== undefined && (
+            <tr className="bg-gray-50 font-semibold">
+              <td className="border border-gray-300 px-4 py-2" colSpan={2}>Процент выполнения</td>
+              <td className="border border-gray-300 px-4 py-2 text-center">
+                {evaluation.score_percent.toFixed(1)}%
+              </td>
+              <td className="border border-gray-300 px-4 py-2"></td>
+            </tr>
+          )}
         </tfoot>
       </table>
     </div>

@@ -10,9 +10,12 @@ export interface Call {
   manager?: string;
   call_date?: string;
   call_identifier?: string;
+  duration?: number;
   created_at: string;
   evaluation?: {
     итоговая_оценка?: number;
+    max_score?: number;
+    score_percent?: number;
     нарушения?: boolean;
   };
 }
@@ -27,6 +30,8 @@ export interface Evaluation {
   id: number;
   scores: Record<string, any>;
   итоговая_оценка: number;
+  max_score?: number;
+  score_percent?: number;
   нарушения: boolean;
   комментарии: string;
   is_retest: boolean;
@@ -297,6 +302,64 @@ export async function exportCalls(
     console.error("Error exporting calls:", {
       error: error.message,
       url: `${API_URL}/api/export`,
+      errorDetails: error
+    });
+    
+    if (error.message?.includes("Failed to fetch") || error.name === "TypeError") {
+      throw new Error(`Не удалось подключиться к серверу по адресу ${API_URL}. Убедитесь, что бэкенд запущен и доступен.`);
+    }
+    throw error;
+  }
+}
+
+export interface Stats {
+  total_calls: number;
+  avg_score: number;
+  avg_percent: number;
+  avg_duration: number;
+  managers_stats: Array<{
+    manager: string;
+    total_calls: number;
+    avg_score: number;
+    avg_percent: number;
+  }>;
+  parameter_stats: Record<string, {
+    total: number;
+    max: number;
+    mid: number;
+    min: number;
+    na: number;
+    avg_score: number;
+  }>;
+  time_series: Array<{
+    date: string;
+    score: number;
+    percent: number;
+  }>;
+}
+
+export async function getStats(
+  manager?: string,
+  startDate?: string,
+  endDate?: string
+): Promise<Stats> {
+  try {
+    const params = new URLSearchParams();
+    if (manager) params.append("manager", manager);
+    if (startDate) params.append("start_date", startDate);
+    if (endDate) params.append("end_date", endDate);
+    
+    const response = await fetch(`${API_URL}/api/stats?${params.toString()}`);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch stats: ${response.status}`);
+    }
+    
+    return response.json();
+  } catch (error: any) {
+    console.error("Error fetching stats:", {
+      error: error.message,
+      url: `${API_URL}/api/stats`,
       errorDetails: error
     });
     

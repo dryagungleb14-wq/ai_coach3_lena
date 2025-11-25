@@ -172,6 +172,12 @@ export default function Home() {
             История звонков
           </button>
           <button
+            onClick={() => router.push("/dashboard")}
+            className="px-4 py-2 bg-blue-600 text-white rounded"
+          >
+            Дашборд
+          </button>
+          <button
             onClick={async () => {
               try {
                 const blob = await exportCalls();
@@ -216,6 +222,11 @@ export default function Home() {
                       {call.evaluation?.итоговая_оценка !== undefined && (
                         <p className="font-semibold">
                           {call.evaluation.итоговая_оценка} баллов
+                          {call.evaluation.score_percent !== undefined && (
+                            <span className="text-sm text-gray-600 ml-1">
+                              ({call.evaluation.score_percent.toFixed(1)}%)
+                            </span>
+                          )}
                         </p>
                       )}
                     </div>

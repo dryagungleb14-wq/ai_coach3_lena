@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 genai.configure(api_key=GEMINI_API_KEY)
 
-def transcribe_audio(audio_path: str) -> str:
+def _transcribe_audio_once(audio_path: str) -> str:
     logger.info(f"Начало транскрипции файла: {audio_path}")
     
     if not os.path.exists(audio_path):
@@ -92,3 +92,27 @@ def transcribe_audio(audio_path: str) -> str:
         import traceback
         logger.error(traceback.format_exc())
         raise
+
+def transcribe_audio(audio_path: str, max_retries: int = 3) -> str:
+    last_exception = None
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(f"Попытка транскрипции {attempt}/{max_retries} для файла {audio_path}")
+            return _transcribe_audio_once(audio_path)
+        except Exception as e:
+            last_exception = e
+            error_msg = str(e)
+            
+            if "quota" in error_msg.lower() or "429" in error_msg or "ResourceExhausted" in str(type(e)):
+                logger.error(f"Ошибка квоты API, повторная попытка не поможет: {e}")
+                raise
+            
+            if attempt < max_retries:
+                wait_time = 2 ** attempt
+                logger.warning(f"Ошибка транскрипции (попытка {attempt}/{max_retries}): {e}. Повтор через {wait_time} сек...")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"Все попытки транскрипции исчерпаны после {max_retries} попыток")
+    
+    raise Exception(f"Не удалось выполнить транскрипцию после {max_retries} попыток: {str(last_exception)}") from last_exception
