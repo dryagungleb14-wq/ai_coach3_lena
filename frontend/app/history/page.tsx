@@ -144,7 +144,7 @@ export default function HistoryPage() {
                   <td className="border border-gray-300 px-4 py-2">{call.call_identifier || "-"}</td>
                   <td className="border border-gray-300 px-4 py-2 text-center">
                     {call.evaluation?.итоговая_оценка !== undefined
-                      ? `${call.evaluation.итоговая_оценка}${call.evaluation.score_percent ? ` (${call.evaluation.score_percent.toFixed(1)}%)` : ""}`
+                      ? `${call.evaluation.итоговая_оценка}${call.evaluation.score_percent !== undefined && call.evaluation.score_percent !== null ? ` (${call.evaluation.score_percent.toFixed(1)}%)` : ""}`
                       : "-"}
                   </td>
                   <td className="border border-gray-300 px-4 py-2 text-center">

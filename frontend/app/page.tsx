@@ -222,7 +222,7 @@ export default function Home() {
                       {call.evaluation?.итоговая_оценка !== undefined && (
                         <p className="font-semibold">
                           {call.evaluation.итоговая_оценка} баллов
-                          {call.evaluation.score_percent !== undefined && (
+                          {call.evaluation.score_percent !== undefined && call.evaluation.score_percent !== null && (
                             <span className="text-sm text-gray-600 ml-1">
                               ({call.evaluation.score_percent.toFixed(1)}%)
                             </span>

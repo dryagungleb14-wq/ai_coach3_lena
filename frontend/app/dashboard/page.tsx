@@ -14,6 +14,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadStats = async () => {
@@ -27,6 +28,7 @@ export default function DashboardPage() {
       setStats(data);
     } catch (error) {
       console.error("Error loading stats:", error);
+      setStats(null);
     } finally {
       setLoading(false);
     }
@@ -115,11 +117,15 @@ export default function DashboardPage() {
             </div>
             <div className="bg-gray-50 p-4 rounded border border-gray-200">
               <div className="text-sm text-gray-600">Средний балл</div>
-              <div className="text-2xl font-bold">{stats.avg_score.toFixed(2)}</div>
+              <div className="text-2xl font-bold">
+                {stats.avg_score !== undefined && stats.avg_score !== null ? stats.avg_score.toFixed(2) : "—"}
+              </div>
             </div>
             <div className="bg-gray-50 p-4 rounded border border-gray-200">
               <div className="text-sm text-gray-600">Средний процент</div>
-              <div className="text-2xl font-bold">{stats.avg_percent.toFixed(1)}%</div>
+              <div className="text-2xl font-bold">
+                {stats.avg_percent !== undefined && stats.avg_percent !== null ? `${stats.avg_percent.toFixed(1)}%` : "—"}
+              </div>
             </div>
             <div className="bg-gray-50 p-4 rounded border border-gray-200">
               <div className="text-sm text-gray-600">Средняя длительность</div>
@@ -207,7 +213,7 @@ export default function DashboardPage() {
                     <div key={idx} className="flex justify-between text-sm">
                       <span>{item.date}</span>
                       <span>
-                        Балл: {item.score.toFixed(2)} ({item.percent.toFixed(1)}%)
+                        Балл: {item.score !== undefined && item.score !== null ? item.score.toFixed(2) : "—"} ({item.percent !== undefined && item.percent !== null ? item.percent.toFixed(1) : "—"}%)
                       </span>
                     </div>
                   ))}

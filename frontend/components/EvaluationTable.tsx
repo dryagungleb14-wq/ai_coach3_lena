@@ -135,7 +135,7 @@ export default function EvaluationTable({ evaluation }: EvaluationTableProps) {
             </td>
             <td className="border border-gray-300 px-4 py-2"></td>
           </tr>
-          {evaluation.score_percent !== undefined && (
+          {evaluation.score_percent !== undefined && evaluation.score_percent !== null && (
             <tr className="bg-gray-50 font-semibold">
               <td className="border border-gray-300 px-4 py-2" colSpan={2}>Процент выполнения</td>
               <td className="border border-gray-300 px-4 py-2 text-center">
