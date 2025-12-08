@@ -28,6 +28,22 @@ def normalize_scores(scores_data: dict) -> dict:
     
     return scores_data
 
+def extract_special_circumstances(scores_data: dict) -> dict:
+    special = scores_data.get("special_circumstances")
+    if not isinstance(special, dict):
+        return {}
+    result = {
+        "client_refused_questions": bool(special.get("client_refused_questions")),
+        "no_trainer": bool(special.get("no_trainer")),
+        "technical_issues": bool(special.get("technical_issues")),
+        "client_reaction": bool(special.get("client_reaction")),
+        "no_lesson_scheduled": bool(special.get("no_lesson_scheduled")),
+    }
+    summary = special.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        result["summary"] = summary.strip()
+    return result
+
 def _evaluate_transcription_once(transcription: str) -> dict:
     if not transcription or len(transcription.strip()) == 0:
         raise ValueError("Транскрипция пустая. Невозможно провести оценку.")
@@ -35,6 +51,7 @@ def _evaluate_transcription_once(transcription: str) -> dict:
     prompt = get_checklist_prompt()
     full_prompt = f"{prompt}\n\nРасшифровка звонка:\n\n{transcription}\n\nОцени звонок по чек-листу и верни JSON."
     
+    special_circumstances = {}
     try:
         model = genai.GenerativeModel(GEMINI_EVALUATION_MODEL)
         response = model.generate_content(
@@ -74,6 +91,7 @@ def _evaluate_transcription_once(transcription: str) -> dict:
             raise Exception("Модель вернула пустой словарь оценок")
         
         scores_data = normalize_scores(scores_data)
+        special_circumstances = extract_special_circumstances(scores_data)
         
         logger.info(f"Итоговые баллы: {json.dumps({k: v.get('score', 'N/A') for k, v in scores_data.items()}, ensure_ascii=False)}")
         
@@ -114,7 +132,8 @@ def _evaluate_transcription_once(transcription: str) -> dict:
         "max_score": max_possible_score,
         "score_percent": score_percent,
         "нарушения": False,
-        "комментарии": json.dumps(comments, ensure_ascii=False)
+        "комментарии": json.dumps(comments, ensure_ascii=False),
+        "special_circumstances": special_circumstances
     }
     
     logger.info(f"Итоговая оценка: {total_score} из {max_possible_score} возможных ({score_percent:.1f}%)")

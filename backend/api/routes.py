@@ -46,6 +46,17 @@ def get_audio_duration(audio_path: str) -> Optional[float]:
         logger.warning(f"Не удалось извлечь длительность из {audio_path}: {e}")
         return None
 
+def format_duration(seconds: Optional[float]) -> str:
+    if seconds is None:
+        return ""
+    try:
+        total = int(seconds)
+        minutes = total // 60
+        secs = total % 60
+        return f"{minutes}:{secs:02d}"
+    except Exception:
+        return ""
+
 def get_db():
     db = SessionLocal()
     try:
@@ -109,7 +120,8 @@ async def upload_files(
                 "filename": call.filename,
                 "manager": call.manager,
                 "call_date": call.call_date.isoformat() if call.call_date else None,
-                "call_identifier": call.call_identifier
+                "call_identifier": call.call_identifier,
+                "requires_review": call.requires_review
             })
             
             thread = threading.Thread(target=analyze_in_background, args=(call.id, file_path), daemon=True)
@@ -186,6 +198,20 @@ def analyze_in_background(call_id: int, audio_path: str):
                 db_local.add(evaluation)
                 call_local.status = "completed"
                 call_local.progress = 100
+                special = evaluation_result.get("special_circumstances") or {}
+                has_special = any(
+                    bool(special.get(key))
+                    for key in [
+                        "client_refused_questions",
+                        "no_trainer",
+                        "technical_issues",
+                        "client_reaction",
+                        "no_lesson_scheduled",
+                    ]
+                )
+                score_percent = evaluation_result.get("score_percent") or 0
+                if has_special or score_percent < 60:
+                    call_local.requires_review = True
                 db_local.commit()
                 logger.info(f"Анализ звонка {call_id} успешно завершен")
         finally:
@@ -295,6 +321,20 @@ async def retest_call(call_id: int, db: Session = Depends(get_db)):
     )
     
     db.add(evaluation)
+    special = evaluation_result.get("special_circumstances") or {}
+    has_special = any(
+        bool(special.get(key))
+        for key in [
+            "client_refused_questions",
+            "no_trainer",
+            "technical_issues",
+            "client_reaction",
+            "no_lesson_scheduled",
+        ]
+    )
+    score_percent = evaluation_result.get("score_percent") or 0
+    if has_special or score_percent < 60:
+        call.requires_review = True
     db.commit()
     db.refresh(evaluation)
     
@@ -375,6 +415,7 @@ async def get_calls(
             "call_identifier": call.call_identifier,
             "duration": call.duration,
             "created_at": call.created_at.isoformat(),
+            "requires_review": call.requires_review,
             "evaluation": {
                 "итоговая_оценка": latest_evaluation.итоговая_оценка if latest_evaluation else None,
                 "max_score": latest_evaluation.max_score if latest_evaluation else None,
@@ -404,6 +445,7 @@ async def get_call(call_id: int, db: Session = Depends(get_db)):
         "transcription": call.transcription,
         "duration": call.duration,
         "created_at": call.created_at.isoformat(),
+        "requires_review": call.requires_review,
         "evaluations": [
             {
                 "id": ev.id,
@@ -611,19 +653,19 @@ async def export_calls(
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow([
-            "Номер", "Дата звонка", "Дата оценки", "Месяц оценки", "Длительность звонка", "Менеджер",
+            "Номер", "Дата звонка", "Дата оценки", "Месяц оценки", "Длительность звонка", "Менеджер", "ID звонка",
             "Установление контакта", "Квалификация", "Выявление потребностей", "", "", "Презентация", "", "", "",
-            "Работа с возражениями", "Завершение сделки", "Голосовые характеристики", "", "Итоговая оценка"
+            "Работа с возражениями", "Завершение сделки", "Голосовые характеристики", "", "Итоговая оценка", "Итоговый процент"
         ])
         writer.writerow([
-            "", "", "", "", "", "",
+            "", "", "", "", "", "", "",
             "1 Приветствие", "2 Первичная квалификация",
             "3.1 Вопросы вторичной квалификации", "3.2 Вопрос о цели обучения", "3.3 Резюмирование потребности",
             "4.1 Презентация обучения из потребности", "4.2 Презентация формата обучения", "4.3 Презентация стоимости", "4.4 Озвучивание информации для пробного",
             "5 Уточнить сомнение клиента",
             "6 Завершение сделки",
             "7.1 Грамотность и формулировки", "7.2 Инициатива за ведение диалога",
-            ""
+            "", ""
         ])
         output.seek(0)
         csv_content = output.getvalue().encode("utf-8-sig")
@@ -659,20 +701,20 @@ async def export_calls(
     writer = csv.writer(output)
     
     writer.writerow([
-        "Номер", "Дата звонка", "Дата оценки", "Месяц оценки", "Длительность звонка", "Менеджер",
+        "Номер", "Дата звонка", "Дата оценки", "Месяц оценки", "Длительность звонка", "Менеджер", "ID звонка",
         "Установление контакта", "Квалификация", "Выявление потребностей", "", "", "Презентация", "", "", "",
-        "Работа с возражениями", "Завершение сделки", "Голосовые характеристики", "", "Итоговая оценка"
+        "Работа с возражениями", "Завершение сделки", "Голосовые характеристики", "", "Итоговая оценка", "Итоговый процент"
     ])
     
     writer.writerow([
-        "", "", "", "", "", "",
+        "", "", "", "", "", "", "",
         "1 Приветствие", "2 Первичная квалификация",
         "3.1 Вопросы вторичной квалификации", "3.2 Вопрос о цели обучения", "3.3 Резюмирование потребности",
         "4.1 Презентация обучения из потребности", "4.2 Презентация формата обучения", "4.3 Презентация стоимости", "4.4 Озвучивание информации для пробного",
         "5 Уточнить сомнение клиента",
         "6 Завершение сделки",
         "7.1 Грамотность и формулировки", "7.2 Инициатива за ведение диалога",
-        ""
+        "", ""
     ])
     
     for idx, call in enumerate(calls, 1):
@@ -698,8 +740,9 @@ async def export_calls(
             call.call_date.strftime("%Y-%m-%d") if call.call_date else "",
             evaluation_date.strftime("%Y-%m-%d %H:%M:%S") if evaluation_date else "",
             month,
-            call.duration or "",
+            format_duration(call.duration),
             call.manager or "",
+            call.call_identifier or "",
             scores.get("1", {}).get("score", ""),
             scores.get("2", {}).get("score", ""),
             scores.get("3.1", {}).get("score", ""),
@@ -713,7 +756,8 @@ async def export_calls(
             scores.get("6", {}).get("score", ""),
             scores.get("7.1", {}).get("score", ""),
             scores.get("7.2", {}).get("score", ""),
-            latest_evaluation.итоговая_оценка or ""
+            latest_evaluation.итоговая_оценка or "",
+            latest_evaluation.score_percent if latest_evaluation.score_percent is not None else ""
         ]
         
         writer.writerow(row)
@@ -746,20 +790,20 @@ async def export_call(call_id: int, db: Session = Depends(get_db)):
     writer = csv.writer(output)
     
     writer.writerow([
-        "Номер", "Дата звонка", "Дата оценки", "Месяц оценки", "Длительность звонка", "Менеджер",
+        "Номер", "Дата звонка", "Дата оценки", "Месяц оценки", "Длительность звонка", "Менеджер", "ID звонка",
         "Установление контакта", "Квалификация", "Выявление потребностей", "", "", "Презентация", "", "", "",
-        "Работа с возражениями", "Завершение сделки", "Голосовые характеристики", "", "Итоговая оценка"
+        "Работа с возражениями", "Завершение сделки", "Голосовые характеристики", "", "Итоговая оценка", "Итоговый процент"
     ])
     
     writer.writerow([
-        "", "", "", "", "", "",
+        "", "", "", "", "", "", "",
         "1 Приветствие", "2 Первичная квалификация",
         "3.1 Вопросы вторичной квалификации", "3.2 Вопрос о цели обучения", "3.3 Резюмирование потребности",
         "4.1 Презентация обучения из потребности", "4.2 Презентация формата обучения", "4.3 Презентация стоимости", "4.4 Озвучивание информации для пробного",
         "5 Уточнить сомнение клиента",
         "6 Завершение сделки",
         "7.1 Грамотность и формулировки", "7.2 Инициатива за ведение диалога",
-        ""
+        "", ""
     ])
     
     scores = latest_evaluation.scores or {}
@@ -779,8 +823,9 @@ async def export_call(call_id: int, db: Session = Depends(get_db)):
         call.call_date.strftime("%Y-%m-%d") if call.call_date else "",
         evaluation_date.strftime("%Y-%m-%d %H:%M:%S") if evaluation_date else "",
         month,
-        call.duration or "",
+        format_duration(call.duration),
         call.manager or "",
+        call.call_identifier or "",
         scores.get("1", {}).get("score", ""),
         scores.get("2", {}).get("score", ""),
         scores.get("3.1", {}).get("score", ""),
@@ -794,7 +839,8 @@ async def export_call(call_id: int, db: Session = Depends(get_db)):
         scores.get("6", {}).get("score", ""),
         scores.get("7.1", {}).get("score", ""),
         scores.get("7.2", {}).get("score", ""),
-        latest_evaluation.итоговая_оценка or ""
+        latest_evaluation.итоговая_оценка or "",
+        latest_evaluation.score_percent if latest_evaluation.score_percent is not None else ""
     ]
     
     writer.writerow(row)

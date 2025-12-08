@@ -12,6 +12,7 @@ export interface Call {
   call_identifier?: string;
   duration?: number;
   created_at: string;
+  requires_review?: boolean;
   evaluation?: {
     итоговая_оценка?: number;
     max_score?: number;
@@ -24,6 +25,7 @@ export interface CallDetail extends Call {
   transcription?: string;
   duration?: number;
   evaluations?: Evaluation[];
+  requires_review?: boolean;
 }
 
 export interface Evaluation {

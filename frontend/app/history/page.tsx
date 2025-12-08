@@ -124,6 +124,7 @@ export default function HistoryPage() {
                 <th className="border border-gray-300 px-4 py-2 text-left">Длительность</th>
                 <th className="border border-gray-300 px-4 py-2 text-left">ID звонка</th>
                 <th className="border border-gray-300 px-4 py-2 text-center">Оценка</th>
+                <th className="border border-gray-300 px-4 py-2 text-center">Проверка</th>
                 <th className="border border-gray-300 px-4 py-2 text-center">Действия</th>
               </tr>
             </thead>
@@ -146,6 +147,9 @@ export default function HistoryPage() {
                     {call.evaluation?.итоговая_оценка !== undefined
                       ? `${call.evaluation.итоговая_оценка}${call.evaluation.score_percent !== undefined && call.evaluation.score_percent !== null ? ` (${call.evaluation.score_percent.toFixed(1)}%)` : ""}`
                       : "-"}
+                  </td>
+                  <td className="border border-gray-300 px-4 py-2 text-center">
+                    {call.requires_review ? <span className="text-sm font-semibold text-red-600">Нужна проверка</span> : "—"}
                   </td>
                   <td className="border border-gray-300 px-4 py-2 text-center">
                     <button

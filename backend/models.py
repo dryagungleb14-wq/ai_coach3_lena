@@ -31,6 +31,7 @@ class Call(Base):
     status = Column(String, default="pending")
     progress = Column(Integer, default=0)
     error_details = Column(Text)
+    requires_review = Column(Boolean, default=False)
     
     evaluations = relationship("Evaluation", back_populates="call")
 
@@ -69,6 +70,10 @@ def migrate_db():
             if 'error_details' not in columns:
                 logger.info("Добавление колонки error_details в таблицу calls")
                 conn.execute(text("ALTER TABLE calls ADD COLUMN error_details TEXT"))
+            
+            if 'requires_review' not in columns:
+                logger.info("Добавление колонки requires_review в таблицу calls")
+                conn.execute(text("ALTER TABLE calls ADD COLUMN requires_review BOOLEAN DEFAULT 0"))
         
         try:
             eval_columns = [col['name'] for col in inspector.get_columns('evaluations')]

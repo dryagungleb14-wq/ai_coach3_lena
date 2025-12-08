@@ -130,7 +130,14 @@ export default function CallDetailPage() {
         </button>
       </div>
 
-      <h1 className="text-2xl font-semibold mb-4">{call.filename}</h1>
+      <div className="flex items-center gap-3 mb-4">
+        <h1 className="text-2xl font-semibold">{call.filename}</h1>
+        {call.requires_review && (
+          <span className="px-2 py-1 text-sm font-semibold text-red-700 bg-red-100 border border-red-200 rounded">
+            Нужна проверка
+          </span>
+        )}
+      </div>
       
       <div className="mb-4 space-y-2">
         {call.manager && <p><strong>Менеджер:</strong> {call.manager}</p>}
