@@ -3,9 +3,15 @@ import json
 import os
 import logging
 import time
+import re
 
 from utils.checklist import get_checklist_prompt
 from config import GEMINI_API_KEY, GEMINI_EVALUATION_MODEL
+
+try:
+    from google.api_core import exceptions as google_exceptions
+except ImportError:
+    google_exceptions = None
 
 genai.configure(api_key=GEMINI_API_KEY)
 
@@ -96,6 +102,26 @@ def _evaluate_transcription_once(transcription: str) -> dict:
         logger.info(f"Итоговые баллы: {json.dumps({k: v.get('score', 'N/A') for k, v in scores_data.items()}, ensure_ascii=False)}")
         
     except Exception as e:
+        error_msg = str(e)
+        is_resource_exhausted = False
+        
+        if google_exceptions and isinstance(e, google_exceptions.ResourceExhausted):
+            is_resource_exhausted = True
+        elif "ResourceExhausted" in str(type(e)) or "429" in error_msg or "quota" in error_msg.lower():
+            is_resource_exhausted = True
+        
+        if is_resource_exhausted:
+            if "limit: 0" in error_msg or "free_tier" in error_msg.lower():
+                user_message = f"Модель {GEMINI_EVALUATION_MODEL} недоступна на бесплатном тарифе Gemini API. Пожалуйста, используйте другую модель (например, gemini-1.5-flash) или перейдите на платный тариф."
+            elif "quota" in error_msg.lower() or "limit" in error_msg.lower():
+                user_message = f"Превышена квота Gemini API. {error_msg}"
+            else:
+                user_message = f"Ошибка квоты Gemini API: {error_msg}"
+            logger.error(f"Ошибка при выполнении оценки через Gemini (429): {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise Exception(user_message) from e
+        
         logger.error(f"Ошибка при оценке: {e}")
         import traceback
         logger.error(traceback.format_exc())
@@ -140,7 +166,13 @@ def _evaluate_transcription_once(transcription: str) -> dict:
     
     return result
 
-def evaluate_transcription(transcription: str, max_retries: int = 3) -> dict:
+def _extract_retry_after(error_msg: str) -> float:
+    retry_match = re.search(r"retry in ([\d.]+)s", error_msg, re.IGNORECASE)
+    if retry_match:
+        return float(retry_match.group(1))
+    return None
+
+def evaluate_transcription(transcription: str, max_retries: int = 5) -> dict:
     last_exception = None
     
     for attempt in range(1, max_retries + 1):
@@ -151,9 +183,26 @@ def evaluate_transcription(transcription: str, max_retries: int = 3) -> dict:
             last_exception = e
             error_msg = str(e)
             
-            if "quota" in error_msg.lower() or "429" in error_msg or "ResourceExhausted" in str(type(e)):
-                logger.error(f"Ошибка квоты API, повторная попытка не поможет: {e}")
-                raise
+            is_quota_error = False
+            if google_exceptions and isinstance(e, google_exceptions.ResourceExhausted):
+                is_quota_error = True
+            elif "ResourceExhausted" in str(type(e)) or "429" in error_msg or "quota" in error_msg.lower():
+                is_quota_error = True
+            
+            if is_quota_error:
+                if "limit: 0" in error_msg or "free_tier" in error_msg.lower():
+                    logger.error(f"Модель недоступна на free tier, повторная попытка не поможет: {e}")
+                    raise
+                
+                retry_after = _extract_retry_after(error_msg)
+                if retry_after and attempt < max_retries:
+                    wait_time = retry_after + 1
+                    logger.warning(f"Ошибка квоты API (попытка {attempt}/{max_retries}): {e}. Повтор через {wait_time:.1f} сек...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"Ошибка квоты API, повторная попытка не поможет: {e}")
+                    raise
             
             if attempt < max_retries:
                 wait_time = 2 ** attempt

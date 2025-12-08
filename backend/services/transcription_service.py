@@ -2,6 +2,7 @@ import google.generativeai as genai
 import os
 import logging
 import time
+import re
 from dotenv import load_dotenv
 from config import GEMINI_API_KEY, GEMINI_TRANSCRIPTION_MODEL
 
@@ -78,7 +79,7 @@ def _transcribe_audio_once(audio_path: str) -> str:
         
         if is_resource_exhausted:
             if "limit: 0" in error_msg or "free_tier" in error_msg.lower():
-                user_message = "Модель недоступна на бесплатном тарифе Gemini API. Пожалуйста, используйте другую модель или перейдите на платный тариф."
+                user_message = f"Модель {GEMINI_TRANSCRIPTION_MODEL} недоступна на бесплатном тарифе Gemini API. Пожалуйста, используйте другую модель (например, gemini-1.5-flash) или перейдите на платный тариф."
             elif "quota" in error_msg.lower() or "limit" in error_msg.lower():
                 user_message = f"Превышена квота Gemini API. {error_msg}"
             else:
@@ -93,7 +94,13 @@ def _transcribe_audio_once(audio_path: str) -> str:
         logger.error(traceback.format_exc())
         raise
 
-def transcribe_audio(audio_path: str, max_retries: int = 3) -> str:
+def _extract_retry_after(error_msg: str) -> float:
+    retry_match = re.search(r"retry in ([\d.]+)s", error_msg, re.IGNORECASE)
+    if retry_match:
+        return float(retry_match.group(1))
+    return None
+
+def transcribe_audio(audio_path: str, max_retries: int = 5) -> str:
     last_exception = None
     
     for attempt in range(1, max_retries + 1):
@@ -104,9 +111,26 @@ def transcribe_audio(audio_path: str, max_retries: int = 3) -> str:
             last_exception = e
             error_msg = str(e)
             
-            if "quota" in error_msg.lower() or "429" in error_msg or "ResourceExhausted" in str(type(e)):
-                logger.error(f"Ошибка квоты API, повторная попытка не поможет: {e}")
-                raise
+            is_quota_error = False
+            if google_exceptions and isinstance(e, google_exceptions.ResourceExhausted):
+                is_quota_error = True
+            elif "ResourceExhausted" in str(type(e)) or "429" in error_msg or "quota" in error_msg.lower():
+                is_quota_error = True
+            
+            if is_quota_error:
+                if "limit: 0" in error_msg or "free_tier" in error_msg.lower():
+                    logger.error(f"Модель недоступна на free tier, повторная попытка не поможет: {e}")
+                    raise
+                
+                retry_after = _extract_retry_after(error_msg)
+                if retry_after and attempt < max_retries:
+                    wait_time = retry_after + 1
+                    logger.warning(f"Ошибка квоты API (попытка {attempt}/{max_retries}): {e}. Повтор через {wait_time:.1f} сек...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"Ошибка квоты API, повторная попытка не поможет: {e}")
+                    raise
             
             if attempt < max_retries:
                 wait_time = 2 ** attempt
