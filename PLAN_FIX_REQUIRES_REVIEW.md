@@ -24,3 +24,7 @@
 - `backend/models.py` — исправлена функция `migrate_db()`
 - `backend/migration_add_requires_review.sql` — создан новый файл миграции
 
+**Коммит:**
+- Коммит `1187f37`: "Исправление ошибки миграции requires_review: добавлена поддержка PostgreSQL DEFAULT FALSE"
+- Изменения отправлены в `origin/main`
+

@@ -77,11 +77,25 @@ async def upload_files(
     
     uploaded_calls = []
     
+    MAX_FILE_SIZE = 100 * 1024 * 1024
+    
     for file in files:
         if not file.content_type or not file.content_type.startswith("audio/"):
+            logger.warning(f"Файл {file.filename} пропущен: неверный тип контента {file.content_type}")
             continue
         
         try:
+            content = await file.read()
+            file_size = len(content)
+            
+            if file_size > MAX_FILE_SIZE:
+                logger.warning(f"Файл {file.filename} пропущен: размер {file_size} байт превышает максимум {MAX_FILE_SIZE} байт")
+                continue
+            
+            if file_size == 0:
+                logger.warning(f"Файл {file.filename} пропущен: пустой файл")
+                continue
+            
             file_id = str(uuid.uuid4())
             filename = f"{file_id}_{file.filename}"
             backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -90,7 +104,6 @@ async def upload_files(
             file_path = os.path.join(uploads_dir, filename)
             
             with open(file_path, "wb") as f:
-                content = await file.read()
                 f.write(content)
             
             duration = get_audio_duration(file_path)
@@ -218,6 +231,13 @@ def analyze_in_background(call_id: int, audio_path: str):
             db_local.close()
         
         update_progress(call_id, 100, "completed", "Анализ завершен")
+        
+        if os.path.exists(audio_path):
+            try:
+                os.remove(audio_path)
+                logger.info(f"Аудио файл удален после успешного анализа: {audio_path}")
+            except Exception as e:
+                logger.warning(f"Не удалось удалить аудио файл {audio_path}: {e}")
             
     except Exception as e:
         import traceback
@@ -235,6 +255,13 @@ def analyze_in_background(call_id: int, audio_path: str):
         finally:
             db_local.close()
         update_progress(call_id, 0, "failed", f"Ошибка: {str(e)}")
+        
+        if os.path.exists(audio_path):
+            try:
+                os.remove(audio_path)
+                logger.info(f"Аудио файл удален после ошибки анализа: {audio_path}")
+            except Exception as e:
+                logger.warning(f"Не удалось удалить аудио файл {audio_path}: {e}")
 
 @router.post("/analyze/{call_id}")
 async def analyze_call(call_id: int, db: Session = Depends(get_db)):

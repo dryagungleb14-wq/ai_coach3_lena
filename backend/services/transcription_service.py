@@ -29,9 +29,21 @@ def _transcribe_audio_once(audio_path: str) -> str:
         audio_file = genai.upload_file(path=audio_path)
         logger.info(f"Аудио файл загружен в Gemini: {audio_file.uri}")
         
+        max_wait_time = 300
+        wait_interval = 2
+        elapsed_time = 0
+        max_checks = max_wait_time // wait_interval
+        
+        check_count = 0
         while audio_file.state.name == "PROCESSING":
-            time.sleep(2)
+            if check_count >= max_checks:
+                raise Exception(f"Таймаут ожидания обработки файла в Gemini (превышено {max_wait_time} секунд)")
+            time.sleep(wait_interval)
+            elapsed_time += wait_interval
+            check_count += 1
             audio_file = genai.get_file(audio_file.name)
+            if check_count % 10 == 0:
+                logger.info(f"Ожидание обработки файла в Gemini: {elapsed_time}/{max_wait_time} секунд")
         
         if audio_file.state.name == "FAILED":
             raise Exception(f"Ошибка загрузки файла в Gemini: {audio_file.state}")

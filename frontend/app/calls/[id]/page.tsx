@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getCall, analyzeCall, retestCall, CallDetail, exportCall } from "@/lib/api";
 import { WebSocketClient } from "@/lib/websocket";
@@ -16,20 +16,21 @@ export default function CallDetailPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
-  const [wsClient, setWsClient] = useState<WebSocketClient | null>(null);
+  const wsClientRef = useRef<WebSocketClient | null>(null);
 
   useEffect(() => {
     loadCall();
     
     return () => {
-      if (wsClient) {
-        wsClient.disconnect();
+      if (wsClientRef.current) {
+        wsClientRef.current.disconnect();
+        wsClientRef.current = null;
       }
     };
   }, [callId]);
 
   useEffect(() => {
-    if (analyzing && !wsClient) {
+    if (analyzing && !wsClientRef.current) {
       const client = new WebSocketClient(callId, (update) => {
         setProgress(update.progress);
         if (update.message) {
@@ -39,12 +40,12 @@ export default function CallDetailPage() {
         if (update.status === "completed") {
           setAnalyzing(false);
           client.disconnect();
-          setWsClient(null);
+          wsClientRef.current = null;
           loadCall();
         } else if (update.status === "failed") {
           setAnalyzing(false);
           client.disconnect();
-          setWsClient(null);
+          wsClientRef.current = null;
           const errorMessage = update.message || "Ошибка при анализе. Попробуйте еще раз.";
           alert(errorMessage);
           loadCall();
@@ -52,13 +53,13 @@ export default function CallDetailPage() {
       });
       
       client.connect();
-      setWsClient(client);
+      wsClientRef.current = client;
     }
     
     return () => {
-      if (wsClient && !analyzing) {
-        wsClient.disconnect();
-        setWsClient(null);
+      if (wsClientRef.current) {
+        wsClientRef.current.disconnect();
+        wsClientRef.current = null;
       }
     };
   }, [analyzing, callId]);
@@ -168,7 +169,7 @@ export default function CallDetailPage() {
                     style={{ width: `${progress}%` }}
                   ></div>
                 </div>
-                {wsClient && !wsClient.isConnected() && (
+                {wsClientRef.current && !wsClientRef.current.isConnected() && (
                   <p className="text-xs text-yellow-600 mt-1">Переподключение...</p>
                 )}
               </div>

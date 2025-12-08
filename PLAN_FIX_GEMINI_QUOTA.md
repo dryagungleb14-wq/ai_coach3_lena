@@ -20,6 +20,18 @@
   - `GEMINI_TRANSCRIPTION_MODEL`: `gemini-1.5-flash` → `gemini-2.5-flash`
   - `GEMINI_EVALUATION_MODEL`: `gemini-1.5-flash` → `gemini-2.5-flash`
 
+### 2025-11-XX XX:XX:XX
+**Промпт:** деплой, мёрджи
+
+**Выполнено:**
+- ✅ Закоммичены изменения в git
+- ✅ Изменения запушены в ветку main (коммит c63ccda)
+- ✅ Файлы в коммите:
+  - `backend/config.py`
+  - `backend/services/evaluation_service.py`
+  - `backend/services/transcription_service.py`
+  - `PLAN_FIX_GEMINI_QUOTA.md`
+
 ## Лог работы
 
 ### 2025-11-XX XX:XX:XX

@@ -51,20 +51,21 @@ class WebSocketManager:
             self.disconnect(ws, call_id)
     
     def send_progress_sync(self, call_id: int, progress: int, status: str, message: str = None):
-        if self._loop and self._loop.is_running():
+        if not self._loop:
+            logger.warning(f"Event loop не установлен, пропуск отправки прогресса для звонка {call_id}")
+            return
+        
+        if not self._loop.is_running():
+            logger.warning(f"Event loop не запущен, пропуск отправки прогресса для звонка {call_id}")
+            return
+        
+        try:
             asyncio.run_coroutine_threadsafe(
                 self.send_progress(call_id, progress, status, message),
                 self._loop
             )
-        else:
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(self.send_progress(call_id, progress, status, message))
-                else:
-                    loop.run_until_complete(self.send_progress(call_id, progress, status, message))
-            except Exception as e:
-                logger.warning(f"Ошибка отправки WebSocket обновления: {e}")
+        except Exception as e:
+            logger.warning(f"Ошибка отправки WebSocket обновления для звонка {call_id}: {e}")
 
 manager = WebSocketManager()
 
