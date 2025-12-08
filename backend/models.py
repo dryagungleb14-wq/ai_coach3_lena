@@ -59,6 +59,8 @@ def migrate_db():
         columns = [col['name'] for col in inspector.get_columns('calls')]
         
         with engine.begin() as conn:
+            db_type = engine.dialect.name
+            
             if 'status' not in columns:
                 logger.info("Добавление колонки status в таблицу calls")
                 conn.execute(text("ALTER TABLE calls ADD COLUMN status TEXT DEFAULT 'pending'"))
@@ -73,7 +75,10 @@ def migrate_db():
             
             if 'requires_review' not in columns:
                 logger.info("Добавление колонки requires_review в таблицу calls")
-                conn.execute(text("ALTER TABLE calls ADD COLUMN requires_review BOOLEAN DEFAULT 0"))
+                if db_type == 'postgresql':
+                    conn.execute(text("ALTER TABLE calls ADD COLUMN requires_review BOOLEAN DEFAULT FALSE"))
+                else:
+                    conn.execute(text("ALTER TABLE calls ADD COLUMN requires_review BOOLEAN DEFAULT 0"))
         
         try:
             eval_columns = [col['name'] for col in inspector.get_columns('evaluations')]
