@@ -41,6 +41,10 @@ def extract_special_circumstances(scores_data: dict) -> dict:
     result = {
         "client_refused_questions": bool(special.get("client_refused_questions")),
         "no_trainer": bool(special.get("no_trainer")),
+        "no_trainer_time": bool(special.get("no_trainer_time")),
+        "trainer_search": bool(special.get("trainer_search")),
+        "parent_child_discussion": bool(special.get("parent_child_discussion")),
+        "conversation_interrupted": bool(special.get("conversation_interrupted")),
         "technical_issues": bool(special.get("technical_issues")),
         "client_reaction": bool(special.get("client_reaction")),
         "no_lesson_scheduled": bool(special.get("no_lesson_scheduled")),

@@ -217,6 +217,10 @@ def analyze_in_background(call_id: int, audio_path: str):
                     for key in [
                         "client_refused_questions",
                         "no_trainer",
+                        "no_trainer_time",
+                        "trainer_search",
+                        "parent_child_discussion",
+                        "conversation_interrupted",
                         "technical_issues",
                         "client_reaction",
                         "no_lesson_scheduled",
@@ -354,6 +358,10 @@ async def retest_call(call_id: int, db: Session = Depends(get_db)):
         for key in [
             "client_refused_questions",
             "no_trainer",
+            "no_trainer_time",
+            "trainer_search",
+            "parent_child_discussion",
+            "conversation_interrupted",
             "technical_issues",
             "client_reaction",
             "no_lesson_scheduled",
