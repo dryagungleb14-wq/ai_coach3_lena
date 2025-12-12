@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router
 from models import init_db
 from services.websocket_service import manager
-from config import GEMINI_API_KEY, DATABASE_URL
+from config import GEMINI_API_KEY, DATABASE_URL, CORS_ORIGINS
 
 config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logging_config.json")
 with open(config_path, "r") as f:
@@ -40,7 +40,7 @@ async def log_requests(request: Request, call_next):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

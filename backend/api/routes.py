@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
@@ -10,6 +10,7 @@ import uuid
 import csv
 import io
 import logging
+import shutil
 import threading
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,9 @@ try:
     from mutagen.wave import WAVE
     MUTAGEN_AVAILABLE = True
 except ImportError:
+    MutagenFile = None
+    MP3 = None
+    WAVE = None
     MUTAGEN_AVAILABLE = False
     logger.warning("mutagen не установлен, длительность аудио не будет извлекаться")
 
@@ -32,7 +36,7 @@ from services.websocket_service import manager
 router = APIRouter()
 
 def get_audio_duration(audio_path: str) -> Optional[float]:
-    if not MUTAGEN_AVAILABLE:
+    if not MUTAGEN_AVAILABLE or MutagenFile is None:
         return None
     
     try:
@@ -64,8 +68,21 @@ def get_db():
     finally:
         db.close()
 
+def is_audio_file(file_path: str) -> bool:
+    """Basic check for audio file signature"""
+    try:
+        # Check global MUTAGEN_AVAILABLE first
+        if MUTAGEN_AVAILABLE and MutagenFile is not None:
+             f = MutagenFile(file_path)
+             return f is not None
+        return True # Fallback if mutagen not available or imports failed
+    except Exception as e:
+        logger.warning(f"Ошибка валидации аудио файла {file_path}: {e}")
+        return False
+
 @router.post("/upload")
 async def upload_files(
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
     manager: Optional[str] = Form(None),
     call_date: Optional[str] = Form(None),
@@ -77,7 +94,9 @@ async def upload_files(
     
     uploaded_calls = []
     
+    # Max file size limit (100MB)
     MAX_FILE_SIZE = 100 * 1024 * 1024
+    CHUNK_SIZE = 1024 * 1024 # 1MB chunks
     
     for file in files:
         if not file.content_type or not file.content_type.startswith("audio/"):
@@ -85,17 +104,6 @@ async def upload_files(
             continue
         
         try:
-            content = await file.read()
-            file_size = len(content)
-            
-            if file_size > MAX_FILE_SIZE:
-                logger.warning(f"Файл {file.filename} пропущен: размер {file_size} байт превышает максимум {MAX_FILE_SIZE} байт")
-                continue
-            
-            if file_size == 0:
-                logger.warning(f"Файл {file.filename} пропущен: пустой файл")
-                continue
-            
             file_id = str(uuid.uuid4())
             filename = f"{file_id}_{file.filename}"
             backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -103,9 +111,25 @@ async def upload_files(
             os.makedirs(uploads_dir, exist_ok=True)
             file_path = os.path.join(uploads_dir, filename)
             
-            with open(file_path, "wb") as f:
-                f.write(content)
+            # Stream to disk with size limit check
+            file_size = 0
+            with open(file_path, "wb") as buffer:
+                while True:
+                    chunk = await file.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    file_size += len(chunk)
+                    if file_size > MAX_FILE_SIZE:
+                        raise HTTPException(status_code=413, detail=f"File {file.filename} exceeds maximum size of 100MB")
+                    buffer.write(chunk)
             
+            # Basic validation
+            if not is_audio_file(file_path):
+                 if os.path.exists(file_path):
+                    os.remove(file_path)
+                 logger.warning(f"Файл {file.filename} пропущен: не является валидным аудио")
+                 continue
+
             duration = get_audio_duration(file_path)
             
             call_date_obj = None
@@ -137,15 +161,32 @@ async def upload_files(
                 "requires_review": call.requires_review
             })
             
-            thread = threading.Thread(target=analyze_in_background, args=(call.id, file_path), daemon=True)
-            thread.start()
-            logger.info(f"Автоматически запущен анализ для звонка {call.id}")
+            # Use BackgroundTasks instead of Thread
+            background_tasks.add_task(analyze_in_background, call.id, file_path)
+            logger.info(f"Запланирован анализ для звонка {call.id}")
+
+        except HTTPException:
+            if 'file_path' in locals() and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
+            # Re-raise HTTP exceptions (like 413)
+            raise
         except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=500, detail=f"Ошибка при загрузке файла {file.filename}: {str(e)}")
-    
+            # Clean up if something failed before DB commit
+            if 'file_path' in locals() and os.path.exists(file_path):
+                 try:
+                     os.remove(file_path)
+                 except:
+                     pass
+            logger.error(f"Ошибка при загрузке файла {file.filename}: {e}")
+            continue
+
     if not uploaded_calls:
-        raise HTTPException(status_code=400, detail="Не удалось загрузить ни один файл. Убедитесь, что файлы имеют аудио формат.")
+        # If we raised 413, this won't be reached. If we skipped files, we reach here.
+        # Check if we have processed calls.
+        raise HTTPException(status_code=400, detail="Не удалось загрузить ни один файл. Убедитесь, что файлы имеют аудио формат и корректны.")
     
     return {"calls": uploaded_calls}
 
@@ -163,6 +204,8 @@ def update_progress(call_id: int, progress: int, status: str = None, message: st
     finally:
         db_local.close()
     
+    # This still uses the sync wrapper which relies on the loop captured at startup
+    # This is acceptable for now given we are running in a threadpool (via BackgroundTasks)
     manager.send_progress_sync(call_id, progress, status or "processing", message)
 
 def analyze_in_background(call_id: int, audio_path: str):
@@ -268,7 +311,7 @@ def analyze_in_background(call_id: int, audio_path: str):
                 logger.warning(f"Не удалось удалить аудио файл {audio_path}: {e}")
 
 @router.post("/analyze/{call_id}")
-async def analyze_call(call_id: int, db: Session = Depends(get_db)):
+async def analyze_call(call_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     try:
         logger.info(f"Начало анализа звонка {call_id}")
         call = db.query(Call).filter(Call.id == call_id).first()
@@ -299,8 +342,7 @@ async def analyze_call(call_id: int, db: Session = Depends(get_db)):
         call.progress = 0
         db.commit()
         
-        thread = threading.Thread(target=analyze_in_background, args=(call_id, audio_path), daemon=True)
-        thread.start()
+        background_tasks.add_task(analyze_in_background, call_id, audio_path)
         
         return {
             "call_id": call_id,
@@ -890,4 +932,3 @@ async def export_call(call_id: int, db: Session = Depends(get_db)):
             "Content-Disposition": f'attachment; filename="call_{call_id}_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
         }
     )
-
