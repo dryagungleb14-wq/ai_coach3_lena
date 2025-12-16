@@ -12,6 +12,7 @@ import io
 import logging
 import shutil
 import threading
+import magic
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +70,26 @@ def get_db():
         db.close()
 
 def is_audio_file(file_path: str) -> bool:
-    """Basic check for audio file signature"""
+    """Check for audio file signature using python-magic and mutagen"""
     try:
-        # Check global MUTAGEN_AVAILABLE first
+        # 1. Check MIME type with python-magic
+        mime = magic.Magic(mime=True)
+        file_type = mime.from_file(file_path)
+        if not file_type.startswith("audio/") and file_type not in ["application/octet-stream"]:
+            # application/octet-stream sometimes happens for weird wavs, but we'll rely on mutagen then
+            logger.warning(f"Suspicious mime type for {file_path}: {file_type}")
+            # Don't return False immediately, let mutagen try.
+            # But if it is 'text/plain' or 'image/png', we should definitely reject.
+            if file_type.startswith("text/") or file_type.startswith("image/"):
+                return False
+
+        # 2. Check structure with Mutagen
         if MUTAGEN_AVAILABLE and MutagenFile is not None:
              f = MutagenFile(file_path)
              return f is not None
-        return True # Fallback if mutagen not available or imports failed
+
+        # If mutagen is not available, rely on magic (weak fallback, but better than nothing)
+        return file_type.startswith("audio/")
     except Exception as e:
         logger.warning(f"Ошибка валидации аудио файла {file_path}: {e}")
         return False
@@ -99,17 +113,39 @@ async def upload_files(
     CHUNK_SIZE = 1024 * 1024 # 1MB chunks
     
     for file in files:
+        # First check: Content-Type header (trusted but weak)
         if not file.content_type or not file.content_type.startswith("audio/"):
-            logger.warning(f"Файл {file.filename} пропущен: неверный тип контента {file.content_type}")
-            continue
+            # Allow application/octet-stream if user forces it, we will check magic later
+            if file.content_type != "application/octet-stream":
+                logger.warning(f"Файл {file.filename} пропущен: неверный тип контента {file.content_type}")
+                continue
         
+        # Second check: Magic numbers (MIME) on the first 2KB
+        try:
+            header = await file.read(2048)
+            await file.seek(0)
+            mime_type = magic.from_buffer(header, mime=True)
+            if not mime_type.startswith("audio/") and mime_type != "application/octet-stream":
+                 logger.warning(f"Файл {file.filename} отклонен: обнаружен тип {mime_type}")
+                 continue
+        except Exception as e:
+             logger.error(f"Ошибка проверки MIME типа для {file.filename}: {e}")
+             continue
+
         try:
             file_id = str(uuid.uuid4())
-            filename = f"{file_id}_{file.filename}"
+            # Sanitize: Use UUID as filename on disk, ignore user provided filename for storage
+            # We preserve the extension if it looks safe, otherwise .bin
+            original_ext = os.path.splitext(file.filename)[1].lower()
+            if original_ext not in ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac']:
+                original_ext = ".bin"
+
+            storage_filename = f"{file_id}{original_ext}"
+
             backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             uploads_dir = os.path.join(backend_dir, "uploads")
             os.makedirs(uploads_dir, exist_ok=True)
-            file_path = os.path.join(uploads_dir, filename)
+            file_path = os.path.join(uploads_dir, storage_filename)
             
             # Stream to disk with size limit check
             file_size = 0
@@ -123,11 +159,11 @@ async def upload_files(
                         raise HTTPException(status_code=413, detail=f"File {file.filename} exceeds maximum size of 100MB")
                     buffer.write(chunk)
             
-            # Basic validation
+            # Third check: Full file validation with Mutagen/Magic on disk
             if not is_audio_file(file_path):
                  if os.path.exists(file_path):
                     os.remove(file_path)
-                 logger.warning(f"Файл {file.filename} пропущен: не является валидным аудио")
+                 logger.warning(f"Файл {file.filename} пропущен: не прошел валидацию аудио (corrupted or fake)")
                  continue
 
             duration = get_audio_duration(file_path)
