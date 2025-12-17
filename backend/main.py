@@ -29,6 +29,19 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="AI Coach API", version="1.0.0")
 
 @app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    # Prevent MIME-sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # Prevent clickjacking by denying iframes
+    response.headers["X-Frame-Options"] = "DENY"
+    # Enable XSS filtering in browser (legacy but good defense in depth)
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    # Control referrer information to protect privacy
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+@app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
     origin = request.headers.get("origin", "не указан")
