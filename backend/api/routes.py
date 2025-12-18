@@ -62,6 +62,14 @@ def format_duration(seconds: Optional[float]) -> str:
     except Exception:
         return ""
 
+def sanitize_for_csv(value: any) -> any:
+    """Sanitize a value to prevent CSV injection (formula injection)."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
+
 def get_db():
     db = SessionLocal()
     try:
@@ -873,7 +881,7 @@ async def export_calls(
             latest_evaluation.score_percent if latest_evaluation.score_percent is not None else ""
         ]
         
-        writer.writerow(row)
+        writer.writerow([sanitize_for_csv(cell) for cell in row])
     
     output.seek(0)
     csv_content = output.getvalue().encode("utf-8-sig")
@@ -956,7 +964,7 @@ async def export_call(call_id: int, db: Session = Depends(get_db)):
         latest_evaluation.score_percent if latest_evaluation.score_percent is not None else ""
     ]
     
-    writer.writerow(row)
+    writer.writerow([sanitize_for_csv(cell) for cell in row])
     
     output.seek(0)
     csv_content = output.getvalue().encode("utf-8-sig")
