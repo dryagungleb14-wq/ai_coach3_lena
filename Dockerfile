@@ -7,13 +7,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# Копируем requirements.txt из backend/
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt && \
     pip cache purge && \
     rm -rf /root/.cache/pip
 
-COPY . .
+# Копируем все файлы из backend/ в /app
+COPY backend/ .
 
 EXPOSE 8000
 
