@@ -9,6 +9,6 @@ GEMINI_TRANSCRIPTION_MODEL = os.getenv("GEMINI_TRANSCRIPTION_MODEL", "gemini-2.5
 GEMINI_EVALUATION_MODEL = os.getenv("GEMINI_EVALUATION_MODEL", "gemini-2.5-flash")
 
 # CORS Configuration
-# Default to localhost:3000 for security, user can override via env var
-default_origins = "http://localhost:3000"
+# Include production Vercel domain and localhost for development
+default_origins = "http://localhost:3000,https://ai-coach3-lena.vercel.app"
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", default_origins).split(",")
