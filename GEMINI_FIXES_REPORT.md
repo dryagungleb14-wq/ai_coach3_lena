@@ -93,3 +93,4 @@
 - `backend/services/transcription_service.py` — сервис транскрипции аудио
 - `PLAN_FIX_GEMINI_QUOTA.md` — подробный лог выполнения работ
 
+
