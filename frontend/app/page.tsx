@@ -237,7 +237,12 @@ export default function Home() {
                         {call.call_date && new Date(call.call_date).toLocaleDateString()}
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex items-center gap-3">
+                      {call.requires_review && (
+                        <span className="text-xs font-semibold text-red-600 bg-red-50 px-2 py-1 rounded">
+                          Нужна проверка
+                        </span>
+                      )}
                       {call.evaluation?.итоговая_оценка !== undefined && (
                         <p className="font-semibold">
                           {call.evaluation.итоговая_оценка} баллов
