@@ -34,6 +34,7 @@ from models import Call, Evaluation, SessionLocal, init_db
 from services.transcription_service import transcribe_audio
 from services.evaluation_service import evaluate_transcription
 from services.websocket_service import manager
+from utils.checklist import get_checklist_data
 router = APIRouter()
 
 def get_audio_duration(audio_path: str) -> Optional[float]:
@@ -464,6 +465,11 @@ async def retest_call(call_id: int, db: Session = Depends(get_db)):
             "is_retest": True
         }
     }
+
+@router.get("/checklist")
+async def get_checklist():
+    return get_checklist_data()
+
 
 @router.get("/calls")
 async def get_calls(

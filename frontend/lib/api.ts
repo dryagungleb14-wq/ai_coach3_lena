@@ -381,3 +381,44 @@ export async function getStats(
   }
 }
 
+export interface ChecklistCriterion {
+  key: string;
+  description: string;
+  max: { score: number; criterion: string };
+  mid: { score: number; criterion: string };
+  min: { score: number; criterion: string };
+}
+
+export interface ChecklistStage {
+  name: string;
+  criteria: ChecklistCriterion[];
+}
+
+export interface ChecklistData {
+  stages: ChecklistStage[];
+  rules: string[];
+  special_circumstances: Record<string, string>;
+}
+
+export async function getChecklist(): Promise<ChecklistData> {
+  try {
+    const response = await fetch(`${API_URL}/api/checklist`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch checklist: ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error: any) {
+    console.error("Error fetching checklist:", {
+      error: error.message,
+      url: `${API_URL}/api/checklist`,
+      errorDetails: error
+    });
+
+    if (error.message?.includes("Failed to fetch") || error.name === "TypeError") {
+      throw new Error(`Не удалось подключиться к серверу по адресу ${API_URL}. Убедитесь, что бэкенд запущен и доступен.`);
+    }
+    throw error;
+  }
+}

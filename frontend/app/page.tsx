@@ -166,7 +166,7 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mb-4 flex gap-4">
+        <div className="mb-4 flex gap-4 flex-wrap">
           <button
             onClick={() => router.push("/history")}
             className="px-4 py-2 bg-gray-600 text-white rounded"
@@ -178,6 +178,12 @@ export default function Home() {
             className="px-4 py-2 bg-blue-600 text-white rounded"
           >
             Дашборд
+          </button>
+          <button
+            onClick={() => router.push("/checklist")}
+            className="px-4 py-2 bg-gray-600 text-white rounded"
+          >
+            Критерии оценки
           </button>
           <button
             onClick={async () => {
