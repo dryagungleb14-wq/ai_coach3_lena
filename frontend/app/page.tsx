@@ -186,6 +186,12 @@ export default function Home() {
             Критерии оценки
           </button>
           <button
+            onClick={() => router.push("/telphin")}
+            className="px-4 py-2 bg-green-600 text-white rounded"
+          >
+            Telphin
+          </button>
+          <button
             onClick={async () => {
               try {
                 const blob = await exportCalls();

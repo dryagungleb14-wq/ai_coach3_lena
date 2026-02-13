@@ -51,6 +51,23 @@ class Evaluation(Base):
     
     call = relationship("Call", back_populates="evaluations")
 
+
+class TelphinSync(Base):
+    __tablename__ = "telphin_syncs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    finished_at = Column(DateTime)
+    status = Column(String, default="running")
+    calls_found = Column(Integer, default=0)
+    calls_imported = Column(Integer, default=0)
+    calls_skipped = Column(Integer, default=0)
+    error_message = Column(Text)
+    filter_start = Column(DateTime)
+    filter_end = Column(DateTime)
+    filter_min_duration = Column(Integer)
+
+
 def migrate_db():
     from sqlalchemy import text, inspect
     

@@ -30,11 +30,12 @@ except ImportError:
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models import Call, Evaluation, SessionLocal, init_db
+from models import Call, Evaluation, TelphinSync, SessionLocal, init_db
 from services.transcription_service import transcribe_audio
 from services.evaluation_service import evaluate_transcription
 from services.websocket_service import manager
 from utils.checklist import get_checklist_data
+from config import TELPHIN_APP_ID, TELPHIN_MIN_DURATION
 router = APIRouter()
 
 def get_audio_duration(audio_path: str) -> Optional[float]:
@@ -465,6 +466,88 @@ async def retest_call(call_id: int, db: Session = Depends(get_db)):
             "is_retest": True
         }
     }
+
+@router.get("/telphin/status")
+async def telphin_status(db: Session = Depends(get_db)):
+    configured = bool(TELPHIN_APP_ID)
+
+    last_sync = db.query(TelphinSync).order_by(TelphinSync.id.desc()).first()
+
+    last_sync_data = None
+    if last_sync:
+        last_sync_data = {
+            "id": last_sync.id,
+            "status": last_sync.status,
+            "started_at": last_sync.started_at.isoformat() if last_sync.started_at else None,
+            "finished_at": last_sync.finished_at.isoformat() if last_sync.finished_at else None,
+            "calls_found": last_sync.calls_found,
+            "calls_imported": last_sync.calls_imported,
+            "calls_skipped": last_sync.calls_skipped,
+            "error_message": last_sync.error_message,
+            "filter_min_duration": last_sync.filter_min_duration,
+        }
+
+    return {
+        "configured": configured,
+        "default_min_duration": TELPHIN_MIN_DURATION,
+        "last_sync": last_sync_data,
+    }
+
+
+@router.get("/telphin/history")
+async def telphin_sync_history(db: Session = Depends(get_db)):
+    syncs = db.query(TelphinSync).order_by(TelphinSync.id.desc()).limit(20).all()
+    return {
+        "syncs": [
+            {
+                "id": s.id,
+                "status": s.status,
+                "started_at": s.started_at.isoformat() if s.started_at else None,
+                "finished_at": s.finished_at.isoformat() if s.finished_at else None,
+                "calls_found": s.calls_found,
+                "calls_imported": s.calls_imported,
+                "calls_skipped": s.calls_skipped,
+                "error_message": s.error_message,
+            }
+            for s in syncs
+        ]
+    }
+
+
+@router.post("/telphin/sync")
+async def telphin_sync(
+    background_tasks: BackgroundTasks,
+    start_date: Optional[str] = Form(None),
+    end_date: Optional[str] = Form(None),
+    min_duration: Optional[int] = Form(None),
+):
+    if not TELPHIN_APP_ID:
+        raise HTTPException(status_code=400, detail="Telphin API не настроен. Укажите TELPHIN_APP_ID и TELPHIN_APP_SECRET в переменных окружения.")
+
+    start_dt = None
+    end_dt = None
+    if start_date:
+        try:
+            start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+        except Exception:
+            pass
+    if end_date:
+        try:
+            end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+        except Exception:
+            pass
+
+    def run_sync():
+        from services.telphin_service import sync_calls
+        try:
+            sync_calls(start_date=start_dt, end_date=end_dt, min_duration=min_duration)
+        except Exception as e:
+            logger.error(f"Ошибка фоновой синхронизации Telphin: {e}")
+
+    background_tasks.add_task(run_sync)
+
+    return {"status": "started", "message": "Синхронизация запущена в фоне"}
+
 
 @router.get("/checklist")
 async def get_checklist():

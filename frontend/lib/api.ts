@@ -422,3 +422,55 @@ export async function getChecklist(): Promise<ChecklistData> {
     throw error;
   }
 }
+
+export interface TelphinSyncEntry {
+  id: number;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  calls_found: number;
+  calls_imported: number;
+  calls_skipped: number;
+  error_message: string | null;
+  filter_min_duration?: number;
+}
+
+export interface TelphinStatus {
+  configured: boolean;
+  default_min_duration: number;
+  last_sync: TelphinSyncEntry | null;
+}
+
+export async function getTelphinStatus(): Promise<TelphinStatus> {
+  const response = await fetch(`${API_URL}/api/telphin/status`);
+  if (!response.ok) throw new Error(`Failed: ${response.status}`);
+  return response.json();
+}
+
+export async function getTelphinHistory(): Promise<{ syncs: TelphinSyncEntry[] }> {
+  const response = await fetch(`${API_URL}/api/telphin/history`);
+  if (!response.ok) throw new Error(`Failed: ${response.status}`);
+  return response.json();
+}
+
+export async function startTelphinSync(options?: {
+  startDate?: string;
+  endDate?: string;
+  minDuration?: number;
+}): Promise<{ status: string; message: string }> {
+  const formData = new FormData();
+  if (options?.startDate) formData.append("start_date", options.startDate);
+  if (options?.endDate) formData.append("end_date", options.endDate);
+  if (options?.minDuration !== undefined) formData.append("min_duration", String(options.minDuration));
+
+  const response = await fetch(`${API_URL}/api/telphin/sync`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || `Failed: ${response.status}`);
+  }
+  return response.json();
+}

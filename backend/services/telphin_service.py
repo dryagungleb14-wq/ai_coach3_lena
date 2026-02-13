@@ -1,0 +1,265 @@
+import requests
+import os
+import time
+import logging
+from datetime import datetime, timedelta
+from typing import Optional
+
+from config import (
+    TELPHIN_APP_ID,
+    TELPHIN_APP_SECRET,
+    TELPHIN_API_BASE,
+    TELPHIN_MIN_DURATION,
+    TELPHIN_DELAY_BETWEEN_CALLS,
+)
+from models import Call, TelphinSync, SessionLocal
+
+logger = logging.getLogger(__name__)
+
+_token_cache = {"token": None, "expires_at": 0}
+
+
+def _get_token() -> str:
+    now = time.time()
+    if _token_cache["token"] and now < _token_cache["expires_at"]:
+        return _token_cache["token"]
+
+    if not TELPHIN_APP_ID or not TELPHIN_APP_SECRET:
+        raise ValueError("TELPHIN_APP_ID и TELPHIN_APP_SECRET не заданы в переменных окружения")
+
+    resp = requests.post(
+        f"{TELPHIN_API_BASE}/oauth/token",
+        data={
+            "grant_type": "client_credentials",
+            "client_id": TELPHIN_APP_ID,
+            "client_secret": TELPHIN_APP_SECRET,
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    _token_cache["token"] = data["access_token"]
+    _token_cache["expires_at"] = now + 3500
+
+    return _token_cache["token"]
+
+
+def _api_get(path: str):
+    token = _get_token()
+    resp = requests.get(
+        f"{TELPHIN_API_BASE}/api/ver1.0/{path}",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_client_id() -> str:
+    data = _api_get("user/")
+    return data["client_id"]
+
+
+def get_extensions(client_id: str) -> list:
+    data = _api_get(f"client/{client_id}/extension/")
+    return data if isinstance(data, list) else []
+
+
+def fetch_call_history(
+    client_id: str,
+    start_date: datetime,
+    end_date: datetime,
+) -> list:
+    start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_date.strftime("%Y-%m-%d %H:%M:%S")
+
+    path = (
+        f"client/{client_id}/call_history/"
+        f"?start_datetime={requests.utils.quote(start_str)}"
+        f"&end_datetime={requests.utils.quote(end_str)}"
+        f"&order=desc"
+    )
+    data = _api_get(path)
+    return data.get("call_history", [])
+
+
+def get_recording_url(extension_id: str, record_uuid: str) -> Optional[str]:
+    try:
+        data = _api_get(f"extension/{extension_id}/record/{record_uuid}/storage_url/")
+        return data.get("record_url")
+    except Exception as e:
+        logger.warning(f"Не удалось получить URL записи {record_uuid}: {e}")
+        return None
+
+
+def download_recording(url: str, dest_path: str) -> bool:
+    try:
+        resp = requests.get(url, stream=True, timeout=120)
+        resp.raise_for_status()
+        with open(dest_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка скачивания записи: {e}")
+        return False
+
+
+def _find_record_uuid(call_entry: dict) -> tuple[Optional[str], Optional[str]]:
+    for cdr in call_entry.get("cdr", []):
+        record_uuid = cdr.get("record_uuid")
+        if record_uuid:
+            ext_id = str(cdr.get("extension_id", ""))
+            if not ext_id:
+                ext_name = cdr.get("extension_name", "")
+                ext_id = ext_name.split("*")[0] if "*" in ext_name else ""
+            return record_uuid, ext_id
+    return None, None
+
+
+def _call_already_imported(db, call_uuid: str) -> bool:
+    return db.query(Call).filter(Call.call_identifier == call_uuid).first() is not None
+
+
+def sync_calls(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    min_duration: Optional[int] = None,
+) -> dict:
+    from api.routes import analyze_in_background
+
+    if min_duration is None:
+        min_duration = TELPHIN_MIN_DURATION
+    if end_date is None:
+        end_date = datetime.utcnow()
+    if start_date is None:
+        start_date = end_date - timedelta(days=1)
+
+    db = SessionLocal()
+    sync_record = TelphinSync(
+        filter_start=start_date,
+        filter_end=end_date,
+        filter_min_duration=min_duration,
+    )
+    db.add(sync_record)
+    db.commit()
+    db.refresh(sync_record)
+    sync_id = sync_record.id
+
+    try:
+        client_id = get_client_id()
+        logger.info(f"Telphin client_id: {client_id}")
+
+        calls = fetch_call_history(client_id, start_date, end_date)
+        logger.info(f"Telphin: получено {len(calls)} записей из истории")
+
+        filtered = [
+            c for c in calls
+            if c.get("duration", 0) >= min_duration and c.get("result") == "ANSWER"
+        ]
+        logger.info(f"Telphin: после фильтрации (>{min_duration}с, ANSWER): {len(filtered)}")
+
+        sync_record.calls_found = len(filtered)
+        db.commit()
+
+        imported = 0
+        skipped = 0
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        uploads_dir = os.path.join(backend_dir, "uploads")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        for entry in filtered:
+            call_uuid = entry.get("call_uuid", "")
+
+            if _call_already_imported(db, call_uuid):
+                skipped += 1
+                continue
+
+            record_uuid, ext_id = _find_record_uuid(entry)
+            if not record_uuid or not ext_id:
+                logger.info(f"Нет записи для звонка {call_uuid}, пропускаем")
+                skipped += 1
+                continue
+
+            rec_url = get_recording_url(ext_id, record_uuid)
+            if not rec_url:
+                skipped += 1
+                continue
+
+            file_path = os.path.join(uploads_dir, f"telphin_{call_uuid}.wav")
+            if not download_recording(rec_url, file_path):
+                skipped += 1
+                continue
+
+            from_user = entry.get("from_username", "")
+            to_user = entry.get("to_username", "")
+            flow = entry.get("flow", "")
+            duration = entry.get("duration", 0)
+
+            init_time = entry.get("init_time_gmt")
+            call_date = None
+            if init_time:
+                try:
+                    call_date = datetime.strptime(init_time, "%Y-%m-%dT%H:%M:%S")
+                except Exception:
+                    try:
+                        call_date = datetime.fromisoformat(init_time.replace("Z", "+00:00"))
+                    except Exception:
+                        pass
+
+            manager_name = from_user if flow == "out" else to_user
+            filename = f"telphin_{flow}_{from_user}_to_{to_user}_{call_uuid[:8]}.wav"
+
+            call = Call(
+                filename=filename,
+                audio_url=file_path,
+                manager=manager_name,
+                call_date=call_date,
+                call_identifier=call_uuid,
+                duration=float(duration),
+                status="pending",
+            )
+            db.add(call)
+            db.commit()
+            db.refresh(call)
+
+            try:
+                analyze_in_background(call.id, file_path)
+            except Exception as e:
+                logger.error(f"Ошибка анализа звонка {call.id}: {e}")
+
+            imported += 1
+
+            if TELPHIN_DELAY_BETWEEN_CALLS > 0:
+                time.sleep(TELPHIN_DELAY_BETWEEN_CALLS)
+
+        sync_record.status = "completed"
+        sync_record.calls_imported = imported
+        sync_record.calls_skipped = skipped
+        sync_record.finished_at = datetime.utcnow()
+        db.commit()
+
+        logger.info(f"Telphin sync завершена: импортировано {imported}, пропущено {skipped}")
+
+        return {
+            "sync_id": sync_id,
+            "status": "completed",
+            "calls_found": len(filtered),
+            "calls_imported": imported,
+            "calls_skipped": skipped,
+        }
+
+    except Exception as e:
+        logger.error(f"Ошибка синхронизации Telphin: {e}")
+        sync_record.status = "failed"
+        sync_record.error_message = str(e)
+        sync_record.finished_at = datetime.utcnow()
+        db.commit()
+        raise
+    finally:
+        db.close()
