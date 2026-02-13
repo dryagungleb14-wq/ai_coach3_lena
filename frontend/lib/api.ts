@@ -201,32 +201,41 @@ export async function retestCall(callId: number): Promise<any> {
   }
 }
 
-export async function getCalls(
-  manager?: string,
-  startDate?: string,
-  endDate?: string
-): Promise<Call[]> {
+export interface CallsResponse {
+  calls: Call[];
+  total: number;
+}
+
+export async function getCalls(options?: {
+  manager?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<CallsResponse> {
   try {
     const params = new URLSearchParams();
-    if (manager) params.append("manager", manager);
-    if (startDate) params.append("start_date", startDate);
-    if (endDate) params.append("end_date", endDate);
-    
+    if (options?.manager) params.append("manager", options.manager);
+    if (options?.startDate) params.append("start_date", options.startDate);
+    if (options?.endDate) params.append("end_date", options.endDate);
+    if (options?.limit !== undefined) params.append("limit", String(options.limit));
+    if (options?.offset !== undefined) params.append("offset", String(options.offset));
+
     const response = await fetch(`${API_URL}/api/calls?${params.toString()}`);
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch calls: ${response.status}`);
     }
-    
+
     const data = await response.json();
-    return data.calls;
+    return { calls: data.calls, total: data.total ?? data.calls.length };
   } catch (error: any) {
     console.error("Error fetching calls:", {
       error: error.message,
       url: `${API_URL}/api/calls`,
       errorDetails: error
     });
-    
+
     if (error.message?.includes("Failed to fetch") || error.name === "TypeError") {
       throw new Error(`Не удалось подключиться к серверу по адресу ${API_URL}. Убедитесь, что бэкенд запущен и доступен.`);
     }

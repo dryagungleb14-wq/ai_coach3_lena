@@ -4,9 +4,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getCalls, exportCalls, Call } from "@/lib/api";
 
+const PAGE_SIZE = 20;
+
 export default function HistoryPage() {
   const router = useRouter();
   const [calls, setCalls] = useState<Call[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [manager, setManager] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -14,16 +18,20 @@ export default function HistoryPage() {
 
   useEffect(() => {
     loadCalls();
-  }, []);
+  }, [page]);
 
   const loadCalls = async () => {
+    setLoading(true);
     try {
-      const data = await getCalls(
-        manager || undefined,
-        startDate || undefined,
-        endDate || undefined
-      );
+      const { calls: data, total: totalCount } = await getCalls({
+        manager: manager || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+      });
       setCalls(data);
+      setTotal(totalCount);
     } catch (error) {
       console.error("Error loading calls:", error);
     } finally {
@@ -31,8 +39,10 @@ export default function HistoryPage() {
     }
   };
 
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
   const handleFilter = () => {
-    setLoading(true);
+    setPage(1);
     loadCalls();
   };
 
@@ -165,6 +175,33 @@ export default function HistoryPage() {
           </table>
           {calls.length === 0 && (
             <div className="text-center py-8 text-gray-500">Нет звонков</div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-6">
+              <p className="text-sm text-gray-600">
+                Показано {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} из {total}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-40"
+                >
+                  ← Назад
+                </button>
+                <span className="px-3 py-1 text-sm">
+                  {page} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-40"
+                >
+                  Вперёд →
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}

@@ -470,56 +470,67 @@ async def get_calls(
     manager: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
     db: Session = Depends(get_db)
 ):
     query = db.query(Call)
-    
+
     if manager:
         query = query.filter(Call.manager == manager)
-    
+
     if start_date:
         try:
             start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
             query = query.filter(Call.call_date >= start_dt)
         except:
             pass
-    
+
     if end_date:
         try:
             end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
             query = query.filter(Call.call_date <= end_dt)
         except:
             pass
-    
-    calls = query.order_by(Call.created_at.desc()).all()
-    
+
+    total = query.count()
+
+    query = query.order_by(Call.created_at.desc())
+
+    if offset:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+
+    calls = query.all()
+
     if not calls:
-        return {"calls": []}
-    
+        return {"calls": [], "total": total}
+
     call_ids = [call.id for call in calls]
-    
+
     latest_eval_subq = db.query(
         Evaluation.call_id,
         func.max(Evaluation.created_at).label('max_created_at')
     ).filter(
         Evaluation.call_id.in_(call_ids)
     ).group_by(Evaluation.call_id).subquery()
-    
+
     latest_evaluations = db.query(Evaluation).join(
         latest_eval_subq,
         (Evaluation.call_id == latest_eval_subq.c.call_id) &
         (Evaluation.created_at == latest_eval_subq.c.max_created_at)
     ).order_by(desc(Evaluation.id)).all()
-    
+
     eval_dict = {}
     for ev in latest_evaluations:
         if ev.call_id not in eval_dict:
             eval_dict[ev.call_id] = ev
-    
+
     result = []
     for call in calls:
         latest_evaluation = eval_dict.get(call.id)
-        
+
         result.append({
             "id": call.id,
             "filename": call.filename,
@@ -536,8 +547,8 @@ async def get_calls(
                 "нарушения": latest_evaluation.нарушения if latest_evaluation else False
             } if latest_evaluation else None
         })
-    
-    return {"calls": result}
+
+    return {"calls": result, "total": total}
 
 @router.get("/calls/{call_id}")
 async def get_call(call_id: int, db: Session = Depends(get_db)):

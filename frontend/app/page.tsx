@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import AudioUpload from "@/components/AudioUpload";
-import { getCalls, Call, exportCalls, checkBackendHealth } from "@/lib/api";
+import { getCalls, Call, exportCalls, checkBackendHealth, CallsResponse } from "@/lib/api";
 import { WebSocketClient } from "@/lib/websocket";
 
 interface AnalysisProgress {
@@ -16,6 +16,7 @@ interface AnalysisProgress {
 export default function Home() {
   const router = useRouter();
   const [recentCalls, setRecentCalls] = useState<Call[]>([]);
+  const [totalCalls, setTotalCalls] = useState(0);
   const [backendStatus, setBackendStatus] = useState<{ status: boolean; message: string; url: string } | null>(null);
   const [isCheckingBackend, setIsCheckingBackend] = useState(true);
   const [analyzingCalls, setAnalyzingCalls] = useState<Map<number, AnalysisProgress>>(new Map());
@@ -48,8 +49,9 @@ export default function Home() {
 
   const loadRecentCalls = async () => {
     try {
-      const data = await getCalls();
-      setRecentCalls(data.slice(0, 5));
+      const { calls, total } = await getCalls({ limit: 5 });
+      setRecentCalls(calls);
+      setTotalCalls(total);
     } catch (error: any) {
       console.error("Error loading calls:", error);
     }
@@ -202,7 +204,24 @@ export default function Home() {
 
         {recentCalls.length > 0 && (
           <div>
-            <h2 className="text-xl font-semibold mb-4">Последние звонки</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">
+                Последние звонки
+                {totalCalls > 0 && (
+                  <span className="text-sm font-normal text-gray-500 ml-2">
+                    (показаны {recentCalls.length} из {totalCalls})
+                  </span>
+                )}
+              </h2>
+              {totalCalls > 5 && (
+                <button
+                  onClick={() => router.push("/history")}
+                  className="text-blue-600 hover:underline text-sm"
+                >
+                  Смотреть все {totalCalls} →
+                </button>
+              )}
+            </div>
             <div className="space-y-2">
               {recentCalls.map((call) => (
                 <div
