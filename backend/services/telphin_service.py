@@ -203,6 +203,12 @@ def sync_calls(
         ]
         logger.info(f"Telphin: после фильтрации (>{min_duration}с, bridged/ANSWER, операторы): {len(filtered)}")
 
+        # Ограничение на максимальное количество звонков за одну синхронизацию
+        MAX_CALLS_PER_SYNC = 20
+        if len(filtered) > MAX_CALLS_PER_SYNC:
+            logger.warning(f"Найдено {len(filtered)} звонков, но будет импортировано только {MAX_CALLS_PER_SYNC}. Уменьшите диапазон дат для полной синхронизации.")
+            filtered = filtered[:MAX_CALLS_PER_SYNC]
+
         sync_record.calls_found = len(filtered)
         db.commit()
 

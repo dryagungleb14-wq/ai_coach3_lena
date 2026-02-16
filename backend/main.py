@@ -85,6 +85,27 @@ async def startup_event():
         
         init_db()
         logger.info("База данных инициализирована")
+
+        # Cleanup зависших синхронизаций при перезапуске
+        from models import SessionLocal, TelphinSync
+        from datetime import datetime
+        db = SessionLocal()
+        try:
+            stuck_syncs = db.query(TelphinSync).filter(
+                TelphinSync.status.in_([None, "in_progress", "running"])
+            ).all()
+            for sync in stuck_syncs:
+                sync.status = "failed"
+                sync.error_message = "Синхронизация прервана перезапуском сервера"
+                sync.finished_at = datetime.utcnow()
+            if stuck_syncs:
+                db.commit()
+                logger.info(f"Отменено {len(stuck_syncs)} зависших синхронизаций")
+        except Exception as e:
+            logger.warning(f"Не удалось очистить зависшие синхронизации: {e}")
+        finally:
+            db.close()
+
         import asyncio
         try:
             loop = asyncio.get_running_loop()
