@@ -312,6 +312,11 @@ def sync_calls(
 
             imported += 1
 
+            # Обновляем прогресс после каждого импортированного звонка
+            sync_record.calls_imported = imported
+            sync_record.calls_skipped = skipped
+            db.commit()
+
             if TELPHIN_DELAY_BETWEEN_CALLS > 0:
                 time.sleep(TELPHIN_DELAY_BETWEEN_CALLS)
 

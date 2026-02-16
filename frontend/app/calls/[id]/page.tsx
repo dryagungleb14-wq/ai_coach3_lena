@@ -134,7 +134,10 @@ export default function CallDetailPage() {
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-2xl font-semibold">{call.filename}</h1>
         {call.requires_review && (
-          <span className="px-2 py-1 text-sm font-semibold text-red-700 bg-red-100 border border-red-200 rounded">
+          <span
+            className="px-2 py-1 text-sm font-semibold text-red-700 bg-red-100 border border-red-200 rounded cursor-help"
+            title="Требует проверки: оценка ниже 60% или обнаружены особые обстоятельства (технические проблемы, резкая реакция клиента, урок не назначен)"
+          >
             Нужна проверка
           </span>
         )}

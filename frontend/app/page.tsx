@@ -251,7 +251,10 @@ export default function Home() {
                     </div>
                     <div className="text-right flex items-center gap-3">
                       {call.requires_review && (
-                        <span className="text-xs font-semibold text-red-600 bg-red-50 px-2 py-1 rounded">
+                        <span
+                          className="text-xs font-semibold text-red-600 bg-red-50 px-2 py-1 rounded cursor-help"
+                          title="Требует проверки: оценка ниже 60% или обнаружены особые обстоятельства (технические проблемы, резкая реакция клиента, урок не назначен)"
+                        >
                           Нужна проверка
                         </span>
                       )}
