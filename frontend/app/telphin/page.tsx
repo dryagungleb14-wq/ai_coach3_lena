@@ -277,7 +277,7 @@ export default function TelphinPage() {
         >
           {syncing ? "Запуск..." : "Синхронизировать"}
         </button>
-        {status?.last_sync?.status === "in_progress" && (
+        {(status?.last_sync?.status === "in_progress" || status?.last_sync?.status === "running") && (
           <button
             onClick={handleCancelSync}
             className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
