@@ -300,6 +300,7 @@ def sync_calls(
                 call_identifier=call_uuid,
                 duration=float(duration),
                 status="pending",
+                telphin_sync_id=sync_id,
             )
             db.add(call)
             db.commit()

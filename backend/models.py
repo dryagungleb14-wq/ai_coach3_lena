@@ -32,8 +32,10 @@ class Call(Base):
     progress = Column(Integer, default=0)
     error_details = Column(Text)
     requires_review = Column(Boolean, default=False)
-    
+    telphin_sync_id = Column(Integer, ForeignKey("telphin_syncs.id"), nullable=True)
+
     evaluations = relationship("Evaluation", back_populates="call")
+    telphin_sync = relationship("TelphinSync", backref="calls")
 
 class Evaluation(Base):
     __tablename__ = "evaluations"
@@ -107,6 +109,10 @@ def migrate_db():
                     conn.execute(text("ALTER TABLE calls ADD COLUMN requires_review BOOLEAN DEFAULT FALSE"))
                 else:
                     conn.execute(text("ALTER TABLE calls ADD COLUMN requires_review BOOLEAN DEFAULT 0"))
+
+            if 'telphin_sync_id' not in columns:
+                logger.info("Добавление колонки telphin_sync_id в таблицу calls")
+                conn.execute(text("ALTER TABLE calls ADD COLUMN telphin_sync_id INTEGER"))
         
         try:
             eval_columns = [col['name'] for col in inspector.get_columns('evaluations')]
