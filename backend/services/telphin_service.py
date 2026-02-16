@@ -179,11 +179,21 @@ def sync_calls(
         calls = fetch_call_history(client_id, start_date, end_date)
         logger.info(f"Telphin: получено {len(calls)} записей из истории")
 
-        # DEBUG: показываем первые 3 звонка для диагностики
+        # DEBUG: показываем отслеживаемые добавочные и статистику
         if calls:
             logger.info(f"DEBUG: Отслеживаемые добавочные: {monitored_ids}")
-            for i, call in enumerate(calls[:3]):
-                logger.info(f"DEBUG: Звонок #{i+1}: from={call.get('from_username')}, to={call.get('to_username')}, duration={call.get('duration')}, result={call.get('result')}")
+            logger.info(f"DEBUG: Показываем первые 10 звонков из истории:")
+            for i, call in enumerate(calls[:10]):
+                logger.info(f"  #{i+1}: from={call.get('from_username')}, to={call.get('to_username')}, duration={call.get('duration')}s, result={call.get('result')}")
+
+            # Показываем звонки наших операторов (до фильтрации по длительности)
+            our_calls = [
+                c for c in calls
+                if c.get("from_username") in monitored_ids or c.get("to_username") in monitored_ids
+            ]
+            logger.info(f"DEBUG: Найдено {len(our_calls)} звонков с отслеживаемых добавочных (без учета длительности/статуса)")
+            for i, call in enumerate(our_calls[:5]):
+                logger.info(f"  Наш звонок #{i+1}: from={call.get('from_username')}, to={call.get('to_username')}, duration={call.get('duration')}s, result={call.get('result')}")
 
         filtered = [
             c for c in calls
@@ -191,7 +201,7 @@ def sync_calls(
             and c.get("result") in ("ANSWER", "bridged")
             and (c.get("from_username") in monitored_ids or c.get("to_username") in monitored_ids)
         ]
-        logger.info(f"Telphin: после фильтрации (>{min_duration}с, ANSWER, операторы): {len(filtered)}")
+        logger.info(f"Telphin: после фильтрации (>{min_duration}с, bridged/ANSWER, операторы): {len(filtered)}")
 
         sync_record.calls_found = len(filtered)
         db.commit()
