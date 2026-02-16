@@ -11,7 +11,7 @@ GEMINI_EVALUATION_MODEL = os.getenv("GEMINI_EVALUATION_MODEL", "gemini-3-flash-p
 TELPHIN_APP_ID = os.getenv("TELPHIN_APP_ID", "")
 TELPHIN_APP_SECRET = os.getenv("TELPHIN_APP_SECRET", "")
 TELPHIN_API_BASE = "https://apiproxy.telphin.ru"
-TELPHIN_MIN_DURATION = int(os.getenv("TELPHIN_MIN_DURATION", "120"))
+TELPHIN_MIN_DURATION = int(os.getenv("TELPHIN_MIN_DURATION", "10"))
 TELPHIN_DELAY_BETWEEN_CALLS = int(os.getenv("TELPHIN_DELAY_BETWEEN_CALLS", "5"))
 
 default_origins = "http://localhost:3000,https://ai-coach3-lena.vercel.app"

@@ -188,7 +188,7 @@ def sync_calls(
         filtered = [
             c for c in calls
             if c.get("duration", 0) >= min_duration
-            and c.get("result") == "ANSWER"
+            and c.get("result") in ("ANSWER", "bridged")
             and (c.get("from_username") in monitored_ids or c.get("to_username") in monitored_ids)
         ]
         logger.info(f"Telphin: после фильтрации (>{min_duration}с, ANSWER, операторы): {len(filtered)}")
