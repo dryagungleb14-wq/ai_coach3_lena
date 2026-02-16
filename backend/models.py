@@ -159,12 +159,6 @@ def seed_managers():
     """Заполнение справочника менеджеров"""
     db = SessionLocal()
     try:
-        # Проверяем, есть ли уже данные
-        existing_count = db.query(Manager).count()
-        if existing_count > 0:
-            logger.info(f"Справочник менеджеров уже содержит {existing_count} записей, пропускаем заполнение")
-            return
-
         managers_data = [
             {"extension": "101", "full_name": "Линдоренко Татьяна", "position": "Менеджер по записи на пробные уроки / индивидуальное ведение"},
             {"extension": "102", "full_name": "Слизунова Диана", "position": "Менеджер по записи на пробные уроки / индивидуальное ведение"},
@@ -222,14 +216,44 @@ def seed_managers():
             {"extension": "190", "full_name": "Скамьин Виктор", "position": "Менеджеры по обучению/ индивидуальное ведение"},
             {"extension": "206", "full_name": "Садошенко Елисавета", "position": "Менеджеры по обучению/ индивидуальное ведение"},
             {"extension": "171", "full_name": "Хвойницкая Надежда", "position": "Менеджеры по обучению/ индивидуальное ведение"},
+            {"extension": "128", "full_name": "Мария Ларик", "position": "Менеджер отдела перерывников"},
+            {"extension": "127", "full_name": "Яна Шерманова", "position": "Менеджер отдела перерывников"},
+            {"extension": "130", "full_name": "Ольга Заянчковская", "position": "Менеджер отдела перерывников"},
+            {"extension": "133", "full_name": "Анастасия Горбунова", "position": "Менеджер отдела перерывников"},
+            {"extension": "176", "full_name": "Дина Шейко", "position": "Менеджер отдела перерывников"},
+            {"extension": "150", "full_name": "Ларик Дарья", "position": "Менеджер отдела перерывников"},
+            {"extension": "147", "full_name": "Алексей Ефременко (на совмещении с основной: расписанщики)", "position": "Менеджер отдела перерывников"},
+            {"extension": "124", "full_name": "Миранович Татьяна", "position": "Менеджер в отделе Заботы"},
+            {"extension": "125", "full_name": "Цвирко Ольга", "position": "Менеджер в отделе Заботы"},
+            {"extension": "126", "full_name": "Дуляик Мария", "position": "Менеджер в отделе Заботы"},
+            {"extension": "182", "full_name": "Миранович Андрей", "position": "Менеджер в отделе Заботы"},
+            {"extension": "136", "full_name": "Сорокина Ангелина", "position": "Менеджер в отделе Заботы"},
+            {"extension": "164", "full_name": "Вирковский Евгений", "position": "Фиксики"},
+            {"extension": "165", "full_name": "Василий Сулим Тех", "position": "Фиксики"},
+            {"extension": "166", "full_name": "Никита Шейко Тех", "position": "Фиксики"},
+            {"extension": "159", "full_name": "Вадим Капелько Тех", "position": "Фиксики"},
+            {"extension": "116", "full_name": "Иван Довгун Тех", "position": "Фиксики"},
+            {"extension": "170", "full_name": "Балыш Артём", "position": "Фиксики"},
         ]
 
+        # Добавляем или обновляем менеджеров
+        added = 0
+        updated = 0
         for data in managers_data:
-            manager = Manager(**data)
-            db.add(manager)
+            existing = db.query(Manager).filter(Manager.extension == data["extension"]).first()
+            if existing:
+                # Обновляем существующего
+                existing.full_name = data["full_name"]
+                existing.position = data["position"]
+                updated += 1
+            else:
+                # Добавляем нового
+                manager = Manager(**data)
+                db.add(manager)
+                added += 1
 
         db.commit()
-        logger.info(f"Успешно добавлено {len(managers_data)} менеджеров в справочник")
+        logger.info(f"Справочник менеджеров обновлён: добавлено {added}, обновлено {updated}")
     except Exception as e:
         logger.error(f"Ошибка при заполнении справочника менеджеров: {e}")
         db.rollback()
