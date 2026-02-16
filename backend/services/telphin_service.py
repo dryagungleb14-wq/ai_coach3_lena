@@ -12,7 +12,7 @@ from config import (
     TELPHIN_MIN_DURATION,
     TELPHIN_DELAY_BETWEEN_CALLS,
 )
-from models import Call, TelphinSync, SessionLocal
+from models import Call, TelphinSync, TelphinExtension, SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +152,27 @@ def sync_calls(
     sync_id = sync_record.id
 
     try:
+        monitored = db.query(TelphinExtension).filter(TelphinExtension.is_monitored == True).all()
+        monitored_ids = set()
+        ext_to_manager = {}
+        for rec in monitored:
+            monitored_ids.add(rec.extension_id)
+            if rec.extension_name:
+                monitored_ids.add(rec.extension_name)
+            name = (rec.manager_name or rec.extension_name or rec.extension_id or "").strip()
+            ext_to_manager[rec.extension_id] = name or rec.extension_id
+            if rec.extension_name:
+                ext_to_manager[rec.extension_name] = name or rec.extension_name
+        if not monitored_ids:
+            sync_record.status = "completed"
+            sync_record.calls_found = 0
+            sync_record.calls_imported = 0
+            sync_record.calls_skipped = 0
+            sync_record.finished_at = datetime.utcnow()
+            db.commit()
+            logger.info("Telphin sync: нет выбранных операторов, синхронизация пропущена")
+            return {"sync_id": sync_id, "status": "completed", "calls_found": 0, "calls_imported": 0, "calls_skipped": 0}
+
         client_id = get_client_id()
         logger.info(f"Telphin client_id: {client_id}")
 
@@ -160,9 +181,11 @@ def sync_calls(
 
         filtered = [
             c for c in calls
-            if c.get("duration", 0) >= min_duration and c.get("result") == "ANSWER"
+            if c.get("duration", 0) >= min_duration
+            and c.get("result") == "ANSWER"
+            and (c.get("from_username") in monitored_ids or c.get("to_username") in monitored_ids)
         ]
-        logger.info(f"Telphin: после фильтрации (>{min_duration}с, ANSWER): {len(filtered)}")
+        logger.info(f"Telphin: после фильтрации (>{min_duration}с, ANSWER, операторы): {len(filtered)}")
 
         sync_record.calls_found = len(filtered)
         db.commit()
@@ -212,7 +235,8 @@ def sync_calls(
                     except Exception:
                         pass
 
-            manager_name = from_user if flow == "out" else to_user
+            ext_key = from_user if flow == "out" else to_user
+            manager_name = ext_to_manager.get(ext_key) or ext_key
             filename = f"telphin_{flow}_{from_user}_to_{to_user}_{call_uuid[:8]}.wav"
 
             call = Call(

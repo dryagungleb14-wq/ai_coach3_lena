@@ -6,8 +6,11 @@ import {
   getTelphinStatus,
   getTelphinHistory,
   startTelphinSync,
+  getTelphinExtensions,
+  updateTelphinExtension,
   TelphinStatus,
   TelphinSyncEntry,
+  TelphinExtensionItem,
 } from "@/lib/api";
 
 export default function TelphinPage() {
@@ -21,6 +24,9 @@ export default function TelphinPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [minDuration, setMinDuration] = useState<number | "">("");
+  const [extensions, setExtensions] = useState<TelphinExtensionItem[]>([]);
+  const [loadingExtensions, setLoadingExtensions] = useState(false);
+  const [savingId, setSavingId] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
@@ -34,12 +40,44 @@ export default function TelphinPage() {
       if (minDuration === "" && s.default_min_duration) {
         setMinDuration(s.default_min_duration);
       }
-    } catch (e: any) {
-      setError(e.message || "Ошибка загрузки");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Ошибка загрузки");
     } finally {
       setLoading(false);
     }
   };
+
+  const loadExtensions = async () => {
+    setLoadingExtensions(true);
+    setError("");
+    try {
+      const res = await getTelphinExtensions();
+      setExtensions(res.extensions);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Ошибка загрузки добавочных");
+    } finally {
+      setLoadingExtensions(false);
+    }
+  };
+
+  const saveExtension = async (
+    id: number,
+    patch: { manager_name?: string; is_monitored?: boolean }
+  ) => {
+    setSavingId(id);
+    try {
+      const updated = await updateTelphinExtension(id, patch);
+      setExtensions((prev) =>
+        prev.map((e) => (e.id === id ? updated : e))
+      );
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Ошибка сохранения");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const hasMonitored = extensions.some((e) => e.is_monitored);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -53,8 +91,8 @@ export default function TelphinPage() {
       setTimeout(loadData, 2000);
       setTimeout(loadData, 8000);
       setTimeout(loadData, 20000);
-    } catch (e: any) {
-      setError(e.message || "Ошибка синхронизации");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Ошибка синхронизации");
     } finally {
       setSyncing(false);
     }
@@ -101,6 +139,72 @@ export default function TelphinPage() {
         </div>
       )}
 
+      {status?.configured && (
+        <div className="mb-8 p-5 border border-gray-200 rounded">
+          <h2 className="text-lg font-semibold mb-4">Операторы</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Выберите добавочные для мониторинга и укажите имена менеджеров. При синхронизации загружаются только звонки выбранных операторов.
+          </p>
+          <button
+            type="button"
+            onClick={loadExtensions}
+            disabled={loadingExtensions}
+            className="mb-4 px-4 py-2 bg-gray-700 text-white rounded disabled:opacity-50"
+          >
+            {loadingExtensions ? "Загрузка…" : "Загрузить список добавочных"}
+          </button>
+          {extensions.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-gray-300 text-sm">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border border-gray-300 px-3 py-2 text-left">Номер</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left">Тип</th>
+                    <th className="border border-gray-300 px-3 py-2 text-center">Мониторить</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left">Имя менеджера</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {extensions.map((ext) => (
+                    <tr key={ext.id}>
+                      <td className="border border-gray-300 px-3 py-2">{ext.extension_name}</td>
+                      <td className="border border-gray-300 px-3 py-2">{ext.extension_type || "—"}</td>
+                      <td className="border border-gray-300 px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={ext.is_monitored}
+                          onChange={(e) => saveExtension(ext.id, { is_monitored: e.target.checked })}
+                          disabled={savingId === ext.id}
+                        />
+                      </td>
+                      <td className="border border-gray-300 px-3 py-2">
+                        <input
+                          type="text"
+                          value={ext.manager_name}
+                          onChange={(e) =>
+                            setExtensions((prev) =>
+                              prev.map((x) =>
+                                x.id === ext.id ? { ...x, manager_name: e.target.value } : x
+                              )
+                            )}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v !== (ext.manager_name || "")) saveExtension(ext.id, { manager_name: v });
+                          }}
+                          placeholder="Имя менеджера"
+                          className="w-full px-2 py-1 border border-gray-300 rounded"
+                          disabled={savingId === ext.id}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mb-8 p-5 border border-gray-200 rounded">
         <h2 className="text-lg font-semibold mb-4">Запустить синхронизацию</h2>
 
@@ -140,10 +244,21 @@ export default function TelphinPage() {
           Загруженные звонки автоматически проходят транскрибацию и оценку.
         </p>
 
+        {status?.configured && extensions.length === 0 && (
+          <p className="text-amber-700 text-sm mb-2">
+            Загрузите список добавочных и выберите операторов для мониторинга.
+          </p>
+        )}
+        {!hasMonitored && status?.configured && extensions.length > 0 && (
+          <p className="text-amber-700 text-sm mb-2">
+            Выберите хотя бы одного оператора для мониторинга (галочка «Мониторить»).
+          </p>
+        )}
         <button
           onClick={handleSync}
-          disabled={syncing || !status?.configured}
+          disabled={syncing || !status?.configured || !hasMonitored}
           className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-40"
+          title={!hasMonitored && status?.configured ? "Сначала выберите операторов для мониторинга" : undefined}
         >
           {syncing ? "Запуск..." : "Синхронизировать"}
         </button>

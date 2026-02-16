@@ -30,7 +30,7 @@ except ImportError:
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models import Call, Evaluation, TelphinSync, SessionLocal, init_db
+from models import Call, Evaluation, TelphinSync, TelphinExtension, SessionLocal, init_db
 from services.transcription_service import transcribe_audio
 from services.evaluation_service import evaluate_transcription
 from services.websocket_service import manager
@@ -491,6 +491,81 @@ async def telphin_status(db: Session = Depends(get_db)):
         "configured": configured,
         "default_min_duration": TELPHIN_MIN_DURATION,
         "last_sync": last_sync_data,
+    }
+
+
+@router.get("/telphin/extensions")
+async def telphin_get_extensions(db: Session = Depends(get_db)):
+    if not TELPHIN_APP_ID:
+        raise HTTPException(status_code=400, detail="Telphin API не настроен.")
+    from services.telphin_service import get_client_id, get_extensions
+    try:
+        client_id = get_client_id()
+        raw = get_extensions(client_id)
+    except Exception as e:
+        logger.exception("Telphin extensions fetch failed")
+        raise HTTPException(status_code=502, detail=str(e))
+    by_ext_id = {str(e.extension_id): e for e in db.query(TelphinExtension).all()}
+    result = []
+    for row in raw:
+        ext_id = str(row.get("id") or row.get("extension_id") or "")
+        name = row.get("name") or row.get("extension_name") or ext_id
+        ext_type = row.get("type") or row.get("extension_type") or ""
+        rec = by_ext_id.get(ext_id)
+        if rec:
+            result.append({
+                "id": rec.id,
+                "extension_id": ext_id,
+                "extension_name": name,
+                "extension_type": ext_type,
+                "manager_name": rec.manager_name or "",
+                "is_monitored": rec.is_monitored,
+            })
+        else:
+            new_rec = TelphinExtension(
+                extension_id=ext_id,
+                extension_name=name,
+                extension_type=ext_type,
+                manager_name="",
+                is_monitored=False,
+            )
+            db.add(new_rec)
+            db.commit()
+            db.refresh(new_rec)
+            result.append({
+                "id": new_rec.id,
+                "extension_id": ext_id,
+                "extension_name": name,
+                "extension_type": ext_type,
+                "manager_name": new_rec.manager_name or "",
+                "is_monitored": new_rec.is_monitored,
+            })
+    return {"extensions": result}
+
+
+@router.put("/telphin/extensions/{ext_id}")
+async def telphin_update_extension(
+    ext_id: int,
+    manager_name: Optional[str] = None,
+    is_monitored: Optional[bool] = None,
+    db: Session = Depends(get_db),
+):
+    rec = db.query(TelphinExtension).filter(TelphinExtension.id == ext_id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Добавочный не найден")
+    if manager_name is not None:
+        rec.manager_name = manager_name
+    if is_monitored is not None:
+        rec.is_monitored = is_monitored
+    db.commit()
+    db.refresh(rec)
+    return {
+        "id": rec.id,
+        "extension_id": rec.extension_id,
+        "extension_name": rec.extension_name,
+        "extension_type": rec.extension_type,
+        "manager_name": rec.manager_name or "",
+        "is_monitored": rec.is_monitored,
     }
 
 

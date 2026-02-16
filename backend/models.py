@@ -68,6 +68,17 @@ class TelphinSync(Base):
     filter_min_duration = Column(Integer)
 
 
+class TelphinExtension(Base):
+    __tablename__ = "telphin_extensions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    extension_id = Column(String, unique=True, nullable=False)
+    extension_name = Column(String)
+    extension_type = Column(String)
+    manager_name = Column(String)
+    is_monitored = Column(Boolean, default=False)
+
+
 def migrate_db():
     from sqlalchemy import text, inspect
     

@@ -474,3 +474,38 @@ export async function startTelphinSync(options?: {
   }
   return response.json();
 }
+
+export interface TelphinExtensionItem {
+  id: number;
+  extension_id: string;
+  extension_name: string;
+  extension_type: string;
+  manager_name: string;
+  is_monitored: boolean;
+}
+
+export async function getTelphinExtensions(): Promise<{ extensions: TelphinExtensionItem[] }> {
+  const response = await fetch(`${API_URL}/api/telphin/extensions`);
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || `Failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function updateTelphinExtension(
+  id: number,
+  data: { manager_name?: string; is_monitored?: boolean }
+): Promise<TelphinExtensionItem> {
+  const params = new URLSearchParams();
+  if (data.manager_name !== undefined) params.set("manager_name", data.manager_name);
+  if (data.is_monitored !== undefined) params.set("is_monitored", String(data.is_monitored));
+  const qs = params.toString();
+  const url = `${API_URL}/api/telphin/extensions/${id}${qs ? `?${qs}` : ""}`;
+  const response = await fetch(url, { method: "PUT" });
+  if (!response.ok) {
+    const res = await response.json().catch(() => ({}));
+    throw new Error(res.detail || `Failed: ${response.status}`);
+  }
+  return response.json();
+}
