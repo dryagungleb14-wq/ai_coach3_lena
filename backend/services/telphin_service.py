@@ -179,6 +179,12 @@ def sync_calls(
         calls = fetch_call_history(client_id, start_date, end_date)
         logger.info(f"Telphin: получено {len(calls)} записей из истории")
 
+        # DEBUG: показываем первые 3 звонка для диагностики
+        if calls:
+            logger.info(f"DEBUG: Отслеживаемые добавочные: {monitored_ids}")
+            for i, call in enumerate(calls[:3]):
+                logger.info(f"DEBUG: Звонок #{i+1}: from={call.get('from_username')}, to={call.get('to_username')}, duration={call.get('duration')}, result={call.get('result')}")
+
         filtered = [
             c for c in calls
             if c.get("duration", 0) >= min_duration
