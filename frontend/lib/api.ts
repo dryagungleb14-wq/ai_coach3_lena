@@ -475,6 +475,18 @@ export async function startTelphinSync(options?: {
   return response.json();
 }
 
+export async function cancelTelphinSync(): Promise<{ status: string; message: string }> {
+  const response = await fetch(`${API_URL}/api/telphin/sync/cancel`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || `Failed: ${response.status}`);
+  }
+  return response.json();
+}
+
 export interface TelphinExtensionItem {
   id: number;
   extension_id: string;

@@ -6,6 +6,7 @@ import {
   getTelphinStatus,
   getTelphinHistory,
   startTelphinSync,
+  cancelTelphinSync,
   getTelphinExtensions,
   updateTelphinExtension,
   TelphinStatus,
@@ -95,6 +96,16 @@ export default function TelphinPage() {
       setError(e instanceof Error ? e.message : "Ошибка синхронизации");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleCancelSync = async () => {
+    try {
+      await cancelTelphinSync();
+      setError("Запрошена отмена синхронизации");
+      setTimeout(loadData, 1000);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Ошибка отмены");
     }
   };
 
@@ -266,6 +277,14 @@ export default function TelphinPage() {
         >
           {syncing ? "Запуск..." : "Синхронизировать"}
         </button>
+        {status?.last_sync?.status === "in_progress" && (
+          <button
+            onClick={handleCancelSync}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Остановить
+          </button>
+        )}
       </div>
 
       {status?.last_sync && (

@@ -17,6 +17,7 @@ from models import Call, TelphinSync, TelphinExtension, SessionLocal
 logger = logging.getLogger(__name__)
 
 _token_cache = {"token": None, "expires_at": 0}
+_cancel_sync_flag = {"cancel": False}
 
 
 def _get_token() -> str:
@@ -44,6 +45,22 @@ def _get_token() -> str:
     _token_cache["expires_at"] = now + 3500
 
     return _token_cache["token"]
+
+
+def request_cancel_sync():
+    """Установить флаг отмены синхронизации"""
+    _cancel_sync_flag["cancel"] = True
+    logger.info("Запрошена отмена синхронизации")
+
+
+def reset_cancel_flag():
+    """Сбросить флаг отмены"""
+    _cancel_sync_flag["cancel"] = False
+
+
+def is_sync_cancelled() -> bool:
+    """Проверить, запрошена ли отмена"""
+    return _cancel_sync_flag["cancel"]
 
 
 def _api_get(path: str):
@@ -218,7 +235,21 @@ def sync_calls(
         uploads_dir = os.path.join(backend_dir, "uploads")
         os.makedirs(uploads_dir, exist_ok=True)
 
+        # Сброс флага отмены перед началом
+        reset_cancel_flag()
+
         for entry in filtered:
+            # Проверка флага отмены
+            if is_sync_cancelled():
+                logger.info(f"Синхронизация отменена пользователем. Обработано {imported} из {len(filtered)} звонков")
+                sync_record.status = "cancelled"
+                sync_record.error_message = "Отменено пользователем"
+                sync_record.calls_imported = imported
+                sync_record.calls_skipped = skipped
+                sync_record.finished_at = datetime.utcnow()
+                db.commit()
+                return {"sync_id": sync_id, "status": "cancelled", "calls_found": len(filtered), "calls_imported": imported, "calls_skipped": skipped}
+
             call_uuid = entry.get("call_uuid", "")
 
             if _call_already_imported(db, call_uuid):

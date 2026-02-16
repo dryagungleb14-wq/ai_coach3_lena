@@ -624,6 +624,14 @@ async def telphin_sync(
     return {"status": "started", "message": "Синхронизация запущена в фоне"}
 
 
+@router.post("/telphin/sync/cancel")
+async def telphin_sync_cancel():
+    """Отменить текущую синхронизацию"""
+    from services.telphin_service import request_cancel_sync
+    request_cancel_sync()
+    return {"status": "ok", "message": "Запрос на отмену синхронизации отправлен"}
+
+
 @router.get("/checklist")
 async def get_checklist():
     return get_checklist_data()
