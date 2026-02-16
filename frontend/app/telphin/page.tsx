@@ -130,6 +130,9 @@ export default function TelphinPage() {
           <p className="text-yellow-700 text-sm">
             Добавьте TELPHIN_APP_ID и TELPHIN_APP_SECRET в переменные окружения бэкенда.
           </p>
+          <p className="text-yellow-700 text-sm mt-1">
+            После добавления переменных перезапустите бэкенд и обновите страницу.
+          </p>
         </div>
       )}
 
@@ -139,21 +142,23 @@ export default function TelphinPage() {
         </div>
       )}
 
-      {status?.configured && (
-        <div className="mb-8 p-5 border border-gray-200 rounded">
-          <h2 className="text-lg font-semibold mb-4">Операторы</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Выберите добавочные для мониторинга и укажите имена менеджеров. При синхронизации загружаются только звонки выбранных операторов.
-          </p>
-          <button
-            type="button"
-            onClick={loadExtensions}
-            disabled={loadingExtensions}
-            className="mb-4 px-4 py-2 bg-gray-700 text-white rounded disabled:opacity-50"
-          >
-            {loadingExtensions ? "Загрузка…" : "Загрузить список добавочных"}
-          </button>
-          {extensions.length > 0 && (
+      <div className="mb-8 p-5 border border-gray-200 rounded">
+        <h2 className="text-lg font-semibold mb-4">Операторы</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Выберите добавочные для мониторинга и укажите имена менеджеров. При синхронизации загружаются только звонки выбранных операторов.
+        </p>
+        <button
+          type="button"
+          onClick={loadExtensions}
+          disabled={loadingExtensions || !status?.configured}
+          className="mb-4 px-4 py-2 bg-gray-700 text-white rounded disabled:opacity-50"
+        >
+          {loadingExtensions ? "Загрузка…" : "Загрузить список добавочных"}
+        </button>
+        {!status?.configured && (
+          <p className="text-sm text-amber-700 mb-4">Сначала настройте Telphin API (см. выше).</p>
+        )}
+        {extensions.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border border-gray-300 text-sm">
                 <thead>
@@ -202,8 +207,7 @@ export default function TelphinPage() {
               </table>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       <div className="mb-8 p-5 border border-gray-200 rounded">
         <h2 className="text-lg font-semibold mb-4">Запустить синхронизацию</h2>

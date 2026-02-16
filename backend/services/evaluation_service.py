@@ -82,9 +82,7 @@ def _evaluate_transcription_once(transcription: str) -> dict:
             raise Exception("Gemini API не вернул текст оценки")
         
         response_text = response.text.strip()
-        
-        logger.info(f"Ответ модели (первые 300 символов): {response_text[:300]}")
-        
+        logger.info(f"Ответ модели получен, длина {len(response_text)} символов")
         if "```json" in response_text:
             response_text = response_text.split("```json")[1].split("```")[0].strip()
         elif "```" in response_text:
@@ -93,9 +91,8 @@ def _evaluate_transcription_once(transcription: str) -> dict:
         try:
             scores_data = json.loads(response_text)
         except json.JSONDecodeError as e:
-            logger.error(f"Ошибка парсинга JSON: {e}")
-            logger.error(f"Полный ответ модели: {response_text}")
-            raise Exception(f"Не удалось распарсить JSON ответ от модели. Ответ: {response_text[:500]}")
+            logger.error(f"Ошибка парсинга JSON оценки: {e}. Длина ответа: {len(response_text)}")
+            raise Exception("Не удалось распарсить JSON ответ от модели оценки")
         
         if not scores_data or not isinstance(scores_data, dict) or len(scores_data) == 0:
             raise Exception("Модель вернула пустой словарь оценок")

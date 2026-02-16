@@ -35,7 +35,7 @@ from services.transcription_service import transcribe_audio
 from services.evaluation_service import evaluate_transcription
 from services.websocket_service import manager
 from utils.checklist import get_checklist_data
-from config import TELPHIN_APP_ID, TELPHIN_MIN_DURATION
+from config import TELPHIN_APP_ID, TELPHIN_APP_SECRET, TELPHIN_MIN_DURATION
 router = APIRouter()
 
 def get_audio_duration(audio_path: str) -> Optional[float]:
@@ -469,7 +469,7 @@ async def retest_call(call_id: int, db: Session = Depends(get_db)):
 
 @router.get("/telphin/status")
 async def telphin_status(db: Session = Depends(get_db)):
-    configured = bool(TELPHIN_APP_ID)
+    configured = bool(TELPHIN_APP_ID and TELPHIN_APP_SECRET)
 
     last_sync = db.query(TelphinSync).order_by(TelphinSync.id.desc()).first()
 
