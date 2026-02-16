@@ -632,6 +632,23 @@ async def telphin_sync_cancel():
     return {"status": "ok", "message": "Запрос на отмену синхронизации отправлен"}
 
 
+@router.get("/managers")
+async def get_managers(db: Session = Depends(get_db)):
+    """Получить список всех менеджеров"""
+    from models import Manager
+    managers = db.query(Manager).order_by(Manager.full_name).all()
+    return [
+        {
+            "id": m.id,
+            "extension": m.extension,
+            "full_name": m.full_name,
+            "position": m.position,
+            "is_active": m.is_active,
+        }
+        for m in managers
+    ]
+
+
 @router.get("/checklist")
 async def get_checklist():
     return get_checklist_data()

@@ -12,7 +12,7 @@ from config import (
     TELPHIN_MIN_DURATION,
     TELPHIN_DELAY_BETWEEN_CALLS,
 )
-from models import Call, TelphinSync, TelphinExtension, SessionLocal
+from models import Call, TelphinSync, TelphinExtension, Manager, SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -172,14 +172,29 @@ def sync_calls(
         monitored = db.query(TelphinExtension).filter(TelphinExtension.is_monitored == True).all()
         monitored_ids = set()
         ext_to_manager = {}
+
+        # Загружаем справочник менеджеров
+        managers_dict = {}
+        for manager in db.query(Manager).filter(Manager.is_active == True).all():
+            managers_dict[manager.extension] = manager.full_name
+
         for rec in monitored:
             monitored_ids.add(rec.extension_id)
             if rec.extension_name:
                 monitored_ids.add(rec.extension_name)
-            name = (rec.manager_name or rec.extension_name or rec.extension_id or "").strip()
+
+            # Приоритет: справочник > manager_name из TelphinExtension > extension_name > extension_id
+            name = (
+                managers_dict.get(rec.extension_id) or
+                rec.manager_name or
+                rec.extension_name or
+                rec.extension_id or
+                ""
+            ).strip()
             ext_to_manager[rec.extension_id] = name or rec.extension_id
             if rec.extension_name:
                 ext_to_manager[rec.extension_name] = name or rec.extension_name
+
         if not monitored_ids:
             sync_record.status = "completed"
             sync_record.calls_found = 0
