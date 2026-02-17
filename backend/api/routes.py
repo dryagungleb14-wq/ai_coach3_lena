@@ -776,6 +776,25 @@ async def get_call(call_id: int, db: Session = Depends(get_db)):
         ]
     }
 
+def _get_special_note(ev) -> str | None:
+    """Extract a human-readable note from special_circumstances."""
+    if not ev or not ev.scores:
+        return None
+    sc = ev.scores.get("special_circumstances", {})
+    if not isinstance(sc, dict):
+        return None
+    notes = {
+        "client_refused": "клиент отказался разговаривать",
+        "technical_issues": "технические проблемы",
+        "lesson_not_scheduled": "урок не назначен",
+        "client_aggressive": "резкая реакция клиента",
+    }
+    for key, label in notes.items():
+        if sc.get(key):
+            return label
+    return None
+
+
 @router.get("/stats")
 async def get_stats(
     manager: Optional[str] = None,
@@ -804,135 +823,77 @@ async def get_stats(
     
     calls = query.all()
     call_ids = [call.id for call in calls]
-    
+
     if not call_ids:
         return {
             "total_calls": 0,
-            "avg_score": 0,
             "avg_percent": 0,
-            "avg_duration": 0,
+            "requires_review_count": 0,
             "managers_stats": [],
-            "parameter_stats": {},
-            "time_series": []
+            "requires_review_calls": []
         }
-    
+
     latest_eval_subq = db.query(
         Evaluation.call_id,
         func.max(Evaluation.created_at).label('max_created_at')
     ).filter(
         Evaluation.call_id.in_(call_ids)
     ).group_by(Evaluation.call_id).subquery()
-    
+
     latest_evaluations = db.query(Evaluation).join(
         latest_eval_subq,
         (Evaluation.call_id == latest_eval_subq.c.call_id) &
         (Evaluation.created_at == latest_eval_subq.c.max_created_at)
     ).all()
-    
+
     total_calls = len([ev for ev in latest_evaluations if ev.итоговая_оценка is not None])
-    
-    scores = [ev.итоговая_оценка for ev in latest_evaluations if ev.итоговая_оценка is not None]
     percents = [ev.score_percent for ev in latest_evaluations if ev.score_percent is not None]
-    durations = [call.duration for call in calls if call.duration is not None]
-    
-    avg_score = sum(scores) / len(scores) if scores else 0
     avg_percent = sum(percents) / len(percents) if percents else 0
-    avg_duration = sum(durations) / len(durations) if durations else 0
-    
+
+    # Managers stats
+    eval_dict = {ev.call_id: ev for ev in latest_evaluations}
     managers_dict = {}
     for call in calls:
         if not call.manager:
             continue
-        manager_name = call.manager
-        if manager_name not in managers_dict:
-            managers_dict[manager_name] = {
-                "manager": manager_name,
-                "total_calls": 0,
-                "avg_score": 0,
-                "avg_percent": 0,
-                "scores": [],
-                "percents": []
-            }
-        managers_dict[manager_name]["total_calls"] += 1
-    
-    eval_dict = {ev.call_id: ev for ev in latest_evaluations}
-    for call in calls:
-        if not call.manager:
-            continue
-        manager_name = call.manager
+        name = call.manager
+        if name not in managers_dict:
+            managers_dict[name] = {"manager": name, "total_calls": 0, "percents": []}
+        managers_dict[name]["total_calls"] += 1
         ev = eval_dict.get(call.id)
-        if ev and ev.итоговая_оценка is not None:
-            managers_dict[manager_name]["scores"].append(ev.итоговая_оценка)
-            if ev.score_percent is not None:
-                managers_dict[manager_name]["percents"].append(ev.score_percent)
-    
+        if ev and ev.score_percent is not None:
+            managers_dict[name]["percents"].append(ev.score_percent)
+
     managers_stats = []
-    for manager_name, data in managers_dict.items():
-        if data["scores"]:
-            data["avg_score"] = sum(data["scores"]) / len(data["scores"])
-        if data["percents"]:
-            data["avg_percent"] = sum(data["percents"]) / len(data["percents"])
-        del data["scores"]
-        del data["percents"]
-        managers_stats.append(data)
-    
-    managers_stats.sort(key=lambda x: x["avg_percent"] if x["avg_percent"] > 0 else 0, reverse=True)
-    
-    parameter_stats = {}
-    all_keys = ["1", "2", "3.1", "3.2", "3.3", "4.1", "4.2", "4.3", "4.4", "5", "6", "7.1", "7.2"]
-    for key in all_keys:
-        parameter_stats[key] = {
-            "total": 0,
-            "max": 0,
-            "mid": 0,
-            "min": 0,
-            "na": 0,
-            "avg_score": 0
-        }
-    
-    for ev in latest_evaluations:
-        if not ev.scores:
-            continue
-        for key in all_keys:
-            score_data = ev.scores.get(key, {})
-            score = score_data.get("score")
-            if score == "N/A" or score == "n/a" or score is None:
-                parameter_stats[key]["na"] += 1
-            elif isinstance(score, (int, float)):
-                parameter_stats[key]["total"] += 1
-                if score == 1:
-                    parameter_stats[key]["max"] += 1
-                elif score == 0.5:
-                    parameter_stats[key]["mid"] += 1
-                elif score == 0:
-                    parameter_stats[key]["min"] += 1
-    
-    for key in all_keys:
-        stats = parameter_stats[key]
-        if stats["total"] > 0:
-            total_score = stats["max"] * 1 + stats["mid"] * 0.5 + stats["min"] * 0
-            stats["avg_score"] = total_score / stats["total"]
-    
-    time_series = []
-    for ev in latest_evaluations:
-        if ev.created_at:
-            date_str = ev.created_at.strftime("%Y-%m-%d")
-            time_series.append({
-                "date": date_str,
-                "score": ev.итоговая_оценка if ev.итоговая_оценка is not None else 0,
-                "percent": ev.score_percent if ev.score_percent is not None else 0
-            })
-    
-    time_series.sort(key=lambda x: x["date"])
-    
+    for name, data in managers_dict.items():
+        avg_p = sum(data["percents"]) / len(data["percents"]) if data["percents"] else 0
+        managers_stats.append({
+            "manager": name,
+            "total_calls": data["total_calls"],
+            "avg_percent": round(avg_p, 1)
+        })
+    managers_stats.sort(key=lambda x: x["avg_percent"])  # worst first
+
+    # Requires review calls
+    review_calls = [c for c in calls if c.requires_review]
+    review_calls_data = []
+    for call in sorted(review_calls, key=lambda c: c.created_at or datetime.min, reverse=True)[:5]:
+        ev = eval_dict.get(call.id)
+        review_calls_data.append({
+            "id": call.id,
+            "filename": call.filename,
+            "manager": call.manager,
+            "call_date": call.call_date.isoformat() if call.call_date else None,
+            "score_percent": round(ev.score_percent, 1) if ev and ev.score_percent is not None else None,
+            "special_note": _get_special_note(ev) if ev else None
+        })
+
     return {
         "total_calls": total_calls,
-        "avg_score": round(avg_score, 2),
-        "avg_percent": round(avg_percent, 2),
-        "avg_duration": round(avg_duration, 2),
+        "avg_percent": round(avg_percent, 1),
+        "requires_review_count": len(review_calls),
         "managers_stats": managers_stats,
-        "parameter_stats": parameter_stats,
-        "time_series": time_series
+        "requires_review_calls": review_calls_data
     }
 
 @router.get("/export")

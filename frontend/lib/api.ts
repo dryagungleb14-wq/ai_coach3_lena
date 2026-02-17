@@ -326,27 +326,20 @@ export async function exportCalls(
 
 export interface Stats {
   total_calls: number;
-  avg_score: number;
   avg_percent: number;
-  avg_duration: number;
+  requires_review_count: number;
   managers_stats: Array<{
     manager: string;
     total_calls: number;
-    avg_score: number;
     avg_percent: number;
   }>;
-  parameter_stats: Record<string, {
-    total: number;
-    max: number;
-    mid: number;
-    min: number;
-    na: number;
-    avg_score: number;
-  }>;
-  time_series: Array<{
-    date: string;
-    score: number;
-    percent: number;
+  requires_review_calls: Array<{
+    id: number;
+    filename: string;
+    manager?: string;
+    call_date?: string;
+    score_percent?: number;
+    special_note?: string;
   }>;
 }
 
