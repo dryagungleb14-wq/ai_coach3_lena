@@ -733,7 +733,8 @@ async def get_calls(
                 "итоговая_оценка": latest_evaluation.итоговая_оценка if latest_evaluation else None,
                 "max_score": latest_evaluation.max_score if latest_evaluation else None,
                 "score_percent": latest_evaluation.score_percent if latest_evaluation else None,
-                "нарушения": latest_evaluation.нарушения if latest_evaluation else False
+                "нарушения": latest_evaluation.нарушения if latest_evaluation else False,
+                "scores": latest_evaluation.scores if latest_evaluation else None
             } if latest_evaluation else None
         })
 

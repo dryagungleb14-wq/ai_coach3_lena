@@ -46,6 +46,21 @@ export default function HistoryPage() {
     loadCalls();
   };
 
+  const getScoreIcon = (score: number | string | undefined) => {
+    if (score === undefined || score === null || score === "N/A" || score === "n/a") {
+      return <span className="text-gray-400">—</span>;
+    }
+    const numScore = typeof score === "string" ? parseFloat(score) : score;
+    if (numScore === 1) {
+      return <span className="text-green-600 text-xl">✓</span>;
+    } else if (numScore === 0.5) {
+      return <span className="text-yellow-500 text-xl">⚠</span>;
+    } else if (numScore === 0) {
+      return <span className="text-red-600 text-xl">⊘</span>;
+    }
+    return <span className="text-gray-400">—</span>;
+  };
+
   const handleExport = async () => {
     try {
       const blob = await exportCalls(
@@ -132,45 +147,70 @@ export default function HistoryPage() {
                 <th className="border border-gray-300 px-4 py-2 text-left">Менеджер</th>
                 <th className="border border-gray-300 px-4 py-2 text-left">Дата звонка</th>
                 <th className="border border-gray-300 px-4 py-2 text-left">Длительность</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">ID звонка</th>
+                <th className="border border-gray-300 px-4 py-2 text-center">Приветствие</th>
+                <th className="border border-gray-300 px-4 py-2 text-center">Квалификация</th>
+                <th className="border border-gray-300 px-4 py-2 text-center">Потребности</th>
+                <th className="border border-gray-300 px-4 py-2 text-center">Презентация</th>
+                <th className="border border-gray-300 px-4 py-2 text-center">Возражения</th>
+                <th className="border border-gray-300 px-4 py-2 text-center">Завершение</th>
                 <th className="border border-gray-300 px-4 py-2 text-center">Оценка</th>
                 <th className="border border-gray-300 px-4 py-2 text-center">Проверка</th>
                 <th className="border border-gray-300 px-4 py-2 text-center">Действия</th>
               </tr>
             </thead>
             <tbody>
-              {calls.map((call) => (
-                <tr key={call.id}>
-                  <td className="border border-gray-300 px-4 py-2">{call.id}</td>
-                  <td className="border border-gray-300 px-4 py-2">{call.filename}</td>
-                  <td className="border border-gray-300 px-4 py-2">{call.manager || "-"}</td>
-                  <td className="border border-gray-300 px-4 py-2">
-                    {call.call_date ? new Date(call.call_date).toLocaleDateString() : "-"}
-                  </td>
-                  <td className="border border-gray-300 px-4 py-2">
-                    {call.duration
-                      ? `${Math.floor(call.duration / 60)}:${Math.floor(call.duration % 60).toString().padStart(2, "0")}`
-                      : "-"}
-                  </td>
-                  <td className="border border-gray-300 px-4 py-2">{call.call_identifier || "-"}</td>
-                  <td className="border border-gray-300 px-4 py-2 text-center">
-                    {call.evaluation?.итоговая_оценка !== undefined
-                      ? `${call.evaluation.итоговая_оценка}${call.evaluation.score_percent !== undefined && call.evaluation.score_percent !== null ? ` (${call.evaluation.score_percent.toFixed(1)}%)` : ""}`
-                      : "-"}
-                  </td>
-                  <td className="border border-gray-300 px-4 py-2 text-center">
-                    {call.requires_review ? <span className="text-sm font-semibold text-red-600">Нужна проверка</span> : "—"}
-                  </td>
-                  <td className="border border-gray-300 px-4 py-2 text-center">
-                    <button
-                      onClick={() => router.push(`/calls/${call.id}`)}
-                      className="text-blue-600 hover:underline"
-                    >
-                      Открыть
+              {calls.map((call) => {
+                const scores = call.evaluation?.scores || {};
+                return (
+                  <tr key={call.id}>
+                    <td className="border border-gray-300 px-4 py-2">{call.id}</td>
+                    <td className="border border-gray-300 px-4 py-2">{call.filename}</td>
+                    <td className="border border-gray-300 px-4 py-2">{call.manager || "-"}</td>
+                    <td className="border border-gray-300 px-4 py-2">
+                      {call.call_date ? new Date(call.call_date).toLocaleDateString() : "-"}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2">
+                      {call.duration
+                        ? `${Math.floor(call.duration / 60)}:${Math.floor(call.duration % 60).toString().padStart(2, "0")}`
+                        : "-"}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      {getScoreIcon(scores["1"]?.score)}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      {getScoreIcon(scores["2"]?.score)}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      {getScoreIcon(scores["3.1"]?.score)}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      {getScoreIcon(scores["4.1"]?.score)}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      {getScoreIcon(scores["5"]?.score)}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      {getScoreIcon(scores["6"]?.score)}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      {call.evaluation?.итоговая_оценка !== undefined
+                        ? `${call.evaluation.итоговая_оценка}${call.evaluation.score_percent !== undefined && call.evaluation.score_percent !== null ? ` (${call.evaluation.score_percent.toFixed(1)}%)` : ""}`
+                        : "-"}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      {call.requires_review ? <span className="text-sm font-semibold text-red-600">Нужна проверка</span> : "—"}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      <button
+                        onClick={() => router.push(`/calls/${call.id}`)}
+                        className="text-blue-600 hover:underline"
+                      >
+                        Открыть
                     </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {calls.length === 0 && (

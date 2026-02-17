@@ -18,6 +18,7 @@ export interface Call {
     max_score?: number;
     score_percent?: number;
     нарушения?: boolean;
+    scores?: Record<string, { score?: number | string; comment?: string }>;
   };
 }
 
